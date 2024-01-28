@@ -27,6 +27,7 @@ We have packaged `swhkd-git`. `swhkd-bin` has been packaged separately by a user
 -   `make setup`
 -   `make clean`
     -   `make` for a musl compile.
+    -   `make build BUILDFLAGS="--release --no-default-features"` for compile without rfkill feature.
     -   `make glibc` for a glibc compile.
 -   `sudo make install`
 
