@@ -3,10 +3,14 @@ use evdev::{
     AttributeSet, Key, RelativeAxisType, SwitchType,
 };
 
+#[cfg(feature = "rfkill")]
 use nix::ioctl_none;
+#[cfg(feature = "rfkill")]
 use std::fs::File;
+#[cfg(feature = "rfkill")]
 use std::os::unix::io::AsRawFd;
 
+#[cfg(feature = "rfkill")]
 ioctl_none!(rfkill_noinput, b'R', 1);
 
 pub fn create_uinput_device() -> Result<VirtualDevice, Box<dyn std::error::Error>> {
@@ -45,10 +49,16 @@ pub fn create_uinput_switches_device() -> Result<VirtualDevice, Box<dyn std::err
     // its default mode. Thus, we disable rfkill-input temporarily, hopefully
     // fast enough that it won't impact anyone. rfkill-input will be enabled
     // again when the file gets closed.
-    let rfkill_file = File::open("/dev/rfkill")?;
-    unsafe {
-        rfkill_noinput(rfkill_file.as_raw_fd())?;
+    // Implemented as feature because in some versions of nixos rfkill is broken
+    // By default feature is enabled
+    #[cfg(feature = "rfkill")]
+    {
+        let rfkill_file = File::open("/dev/rfkill")?;
+        unsafe {
+            rfkill_noinput(rfkill_file.as_raw_fd())?;
+        }
     }
+
     let device = VirtualDeviceBuilder::new()?
         .name("swhkd switches virtual output")
         .with_switches(&switches)?

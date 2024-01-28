@@ -3,7 +3,7 @@
 DESTDIR ?= "/"
 DAEMON_BINARY := swhkd
 SERVER_BINARY := swhks
-BUILDFLAGS := --release
+BUILDFLAGS := --release # add --no-default-features to remove rfkill feature
 POLKIT_DIR := /usr/share/polkit-1/actions
 POLKIT_POLICY_FILE := com.github.swhkd.pkexec.policy
 TARGET_DIR := /usr/bin
