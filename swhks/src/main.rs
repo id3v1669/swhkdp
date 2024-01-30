@@ -21,7 +21,7 @@ fn main() -> std::io::Result<()> {
         .author(env!("CARGO_PKG_AUTHORS"))
         .about("IPC Server for swhkd")
         .arg(arg!(-l --log <FILE>).required(false).takes_value(true).help(
-            "Set a custom log file. (Defaults to ${XDG_DATA_HOME:-$HOME/.local/share}/swhks-current_unix_time.log)",
+            "Set a custom log file. (Defaults to ${XDG_DATA_HOME:-$HOME/.local/share}/swhks/swhks-current_unix_time.log)",
         ))
 		.arg(arg!(-d --debug).required(false).takes_value(false).help(
 				"Enable debug mode."
