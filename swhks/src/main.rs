@@ -38,7 +38,8 @@ fn main() -> std::io::Result<()> {
     log::trace!("Setting process umask.");
     umask(Mode::S_IWGRP | Mode::S_IWOTH);
 
-    let (pid_file_path, sock_file_path) = get_file_paths();
+    let pid_file_path = get_pid_file_paths();
+    let sock_file_path = format!("/run/user/{}/swhkd.sock", unistd::Uid::current());
 
     let log_file_name = if let Some(val) = args.value_of("log") {
         val.to_string()
@@ -142,28 +143,18 @@ fn main() -> std::io::Result<()> {
     }
 }
 
-fn get_file_paths() -> (String, String) {
+fn get_pid_file_paths() -> String {
     match env::var("XDG_RUNTIME_DIR") {
         Ok(val) => {
-            log::info!(
-                "XDG_RUNTIME_DIR Variable is present, using it's value as default file path."
-            );
-
-            let pid_file_path = format!("{}/swhks.pid", val);
-            let sock_file_path = format!("{}/swhkd.sock", val);
-
-            (pid_file_path, sock_file_path)
+            log::info!("XDG_RUNTIME_DIR Variable is present, using it's value as default file path.");
+            format!("{}/swhks.pid", val)
         }
         Err(e) => {
             log::trace!("XDG_RUNTIME_DIR Variable is not set, falling back on hardcoded path.\nError: {:#?}", e);
-
-            let pid_file_path = format!("/run/user/{}/swhks.pid", unistd::Uid::current());
-            let sock_file_path = format!("/run/user/{}/swhkd.sock", unistd::Uid::current());
-
-            (pid_file_path, sock_file_path)
+            format!("/run/user/{}/swhks.pid", unistd::Uid::current())
         }
     }
-}
+} 
 
 fn run_system_command(command: &str, log_path: &Path) {
     _ = daemon(true, false);
