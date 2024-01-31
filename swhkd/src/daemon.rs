@@ -541,7 +541,7 @@ pub fn setup_swhkd(invoking_uid: u32) {
             if pid.to_string() == swhkd_pid && process.exe() == env::current_exe().unwrap() {
                 log::error!("Swhkd is already running!");
                 log::error!("pid of existing swhkd process: {}", pid.to_string());
-                log::error!("To close the existing swhkd process, run `sudo killall swhkd`");
+                log::error!("To close the existing swhkd process, run `sudo kill $(pidof swhkd)`");
                 exit(1);
             }
         }
