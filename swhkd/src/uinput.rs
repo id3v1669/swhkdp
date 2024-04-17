@@ -7,6 +7,7 @@ use nix::ioctl_none;
 use std::fs::File;
 use std::os::unix::io::AsRawFd;
 
+#[cfg(feature = "rfkill")]
 ioctl_none!(rfkill_noinput, b'R', 1);
 
 pub fn create_uinput_device() -> Result<VirtualDevice, Box<dyn std::error::Error>> {
@@ -36,9 +37,12 @@ pub fn create_uinput_switches_device() -> Result<VirtualDevice, Box<dyn std::err
     // its default mode. Thus, we disable rfkill-input temporarily, hopefully
     // fast enough that it won't impact anyone. rfkill-input will be enabled
     // again when the file gets closed.
-    let rfkill_file = File::open("/dev/rfkill")?;
-    unsafe {
-        rfkill_noinput(rfkill_file.as_raw_fd())?;
+    #[cfg(feature = "rfkill")]
+    {
+        let rfkill_file = File::open("/dev/rfkill")?;
+        unsafe {
+            rfkill_noinput(rfkill_file.as_raw_fd())?;
+        }
     }
     let device = VirtualDeviceBuilder::new()?
         .name("swhkd switches virtual output")
@@ -618,23 +622,47 @@ pub fn get_all_relative_axes() -> &'static [RelativeAxisType] {
 }
 
 pub fn get_all_switches() -> &'static [SwitchType] {
-    &[
-        SwitchType::SW_LID,
-        SwitchType::SW_TABLET_MODE,
-        SwitchType::SW_HEADPHONE_INSERT,
-        SwitchType::SW_RFKILL_ALL,
-        SwitchType::SW_MICROPHONE_INSERT,
-        SwitchType::SW_DOCK,
-        SwitchType::SW_LINEOUT_INSERT,
-        SwitchType::SW_JACK_PHYSICAL_INSERT,
-        SwitchType::SW_VIDEOOUT_INSERT,
-        SwitchType::SW_CAMERA_LENS_COVER,
-        SwitchType::SW_KEYPAD_SLIDE,
-        SwitchType::SW_FRONT_PROXIMITY,
-        SwitchType::SW_ROTATE_LOCK,
-        SwitchType::SW_LINEIN_INSERT,
-        SwitchType::SW_MUTE_DEVICE,
-        SwitchType::SW_PEN_INSERTED,
-        SwitchType::SW_MACHINE_COVER,
-    ]
+    #[cfg(feature = "rfkill")]
+    {
+        &[
+            SwitchType::SW_LID,
+            SwitchType::SW_TABLET_MODE,
+            SwitchType::SW_HEADPHONE_INSERT,
+            SwitchType::SW_RFKILL_ALL,
+            SwitchType::SW_MICROPHONE_INSERT,
+            SwitchType::SW_DOCK,
+            SwitchType::SW_LINEOUT_INSERT,
+            SwitchType::SW_JACK_PHYSICAL_INSERT,
+            SwitchType::SW_VIDEOOUT_INSERT,
+            SwitchType::SW_CAMERA_LENS_COVER,
+            SwitchType::SW_KEYPAD_SLIDE,
+            SwitchType::SW_FRONT_PROXIMITY,
+            SwitchType::SW_ROTATE_LOCK,
+            SwitchType::SW_LINEIN_INSERT,
+            SwitchType::SW_MUTE_DEVICE,
+            SwitchType::SW_PEN_INSERTED,
+            SwitchType::SW_MACHINE_COVER,
+        ]
+    }
+    #[cfg(not(feature = "rfkill"))]
+    {
+        &[
+            SwitchType::SW_LID,
+            SwitchType::SW_TABLET_MODE,
+            SwitchType::SW_HEADPHONE_INSERT,
+            SwitchType::SW_MICROPHONE_INSERT,
+            SwitchType::SW_DOCK,
+            SwitchType::SW_LINEOUT_INSERT,
+            SwitchType::SW_JACK_PHYSICAL_INSERT,
+            SwitchType::SW_VIDEOOUT_INSERT,
+            SwitchType::SW_CAMERA_LENS_COVER,
+            SwitchType::SW_KEYPAD_SLIDE,
+            SwitchType::SW_FRONT_PROXIMITY,
+            SwitchType::SW_ROTATE_LOCK,
+            SwitchType::SW_LINEIN_INSERT,
+            SwitchType::SW_MUTE_DEVICE,
+            SwitchType::SW_PEN_INSERTED,
+            SwitchType::SW_MACHINE_COVER,
+        ]
+    }
 }

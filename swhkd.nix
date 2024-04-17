@@ -4,6 +4,7 @@
 , pkg-config
 , udev
 , killall
+, rfkillFeature? false
 }:
 
 rustPlatform.buildRustPackage rec {
@@ -14,6 +15,8 @@ rustPlatform.buildRustPackage rec {
   src = lib.cleanSource ./.;
 
   cargoLock = { lockFile = "${src}/Cargo.lock"; };
+
+  buildFeatures = [ ] ++ lib.optional rfkillFeature "rfkill";
 
   nativeBuildInputs = [ 
     pkg-config
