@@ -72,6 +72,50 @@ All supported key and modifier names are listed in `man 5 swhkd-keys`.
    respective init system. Currently, only systemd and OpenRC service files
    exist and more will be added soon including Runit.
 
+## Nix
+
+For now flake users only.
+
+This repo contains a NixOS Module for swhkd service.
+To enable module add an input first and import to modules:
+```nix
+{
+  inputs = {
+    swhkd.url = "github:id3v1669/swhkd";
+  }
+
+  outputs = {nixpkgs, swhkd, ...} @ inputs: {
+    nixosConfigurations.HOSTNAME = nixpkgs.lib.nixosSystem {
+      specialArgs = { inherit inputs; };
+      modules = [
+        ./configuration.nix
+        swhkd.nixosModules.default
+      ];
+    };
+  } 
+}
+```
+After importing you should be able to use it in your configuration.nix file:
+```nix
+{ inputs
+, ...
+}:
+{
+  services.swhkd = {
+    enable = true;
+    package = inputs.swhkd.packages.${system}.default.override { rfkillFeature = true; };
+    cooldown = 300;
+    configPath = "/home/user/.config/swhkd/swhkdrc";
+  };
+}
+```
+* rfkill is an potional feature related to [this](https://github.com/waycrate/swhkd/pull/254) pr/discussion
+* Do not forget to start/add to autostart swhkd of your system after login.
+* Replace HOSTNAME with your oun
+
+ps. this module will be updated to support devices and maybe even config, but 
+it is already good enough to use
+
 ## Security
 
 We use a server-client model to keep you safe. The daemon (`swhkd` — privileged

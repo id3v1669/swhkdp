@@ -63,11 +63,11 @@ struct Args {
 
     /// Take a list of devices from the user
     #[arg(short = 'D', long, num_args = 0.., value_delimiter = ' ')]
-    device: Vec<String>,
+    devices: Vec<String>,
 
     /// Take a list of devices to ignore from the user
     #[arg(short = 'I', long, num_args = 0.., value_delimiter = ' ')]
-    ignoredevice: Vec<String>,
+    ignoredevices: Vec<String>,
 }
 
 #[tokio::main]
@@ -122,8 +122,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let mut modes = load_config();
     let mut mode_stack: Vec<usize> = vec![0];
-    let arg_add_devices = args.device;
-    let arg_ignore_devices = args.ignoredevice;
+    let arg_add_devices = args.devices;
+    let arg_ignore_devices = args.ignoredevices;
 
     let to_add =
         |dev: &Device| arg_add_devices.contains(&dev.name().unwrap_or("[unknown]").to_string());

@@ -27,34 +27,8 @@
 
     defaultPackage = eachSystem (system: self.packages.${system}.default);
 
-    devShells = eachSystem (system:
-    let 
-      pkgs = pkgsFor system;
-    in 
-    {
-      default = pkgs.mkShell {
-        name = "Swhkd-devel";
-        nativeBuildInputs = with pkgs; [
-          # Compilers
-          cargo
-          rustc
-          scdoc
-
-          # libs
-          udev
-
-          # Tools
-          pkg-config
-          clippy
-          gdb
-          gnumake
-          rust-analyzer
-          rustfmt
-          strace
-          valgrind
-          zip
-        ];
-      };
+    devShells = eachSystem (system: {
+      default = (pkgsFor system).callPackage ./nix/shell.nix { };
     });
 
     nixosModules.default = import ./nix/module.nix inputs;
