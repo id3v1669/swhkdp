@@ -85,11 +85,6 @@ your desktop calling shell commands).
 
 So yes, you're safe!
 
-## Support
-
-1. https://matrix.to/#/#waycrate-tools:matrix.org
-1. https://discord.gg/KKZRDYrRYW
-
 ## Contributors
 
 <a href="https://github.com/id3v1669/swhkd/graphs/contributors">

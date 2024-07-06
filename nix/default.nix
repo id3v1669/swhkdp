@@ -12,7 +12,7 @@ rustPlatform.buildRustPackage rec {
   pname = "swhkd";
   version = "1.3.0";
 
-  src = lib.cleanSource ./.;
+  src = lib.cleanSource ../.;
 
   cargoLock = { lockFile = "${src}/Cargo.lock"; };
 

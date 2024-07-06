@@ -51,6 +51,7 @@ After that add 'swhks &' to autorun of your desktop enviroment or window manager
 -   Policy Kit Daemon ( polkit )
 -   Uinput kernel module
 -   Evdev kernel module
+-   `killall`
 
 **Compile time:**
 

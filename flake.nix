@@ -22,7 +22,7 @@
   in 
   {
     packages = eachSystem (system: {
-      swhkd = nixpkgs.legacyPackages.${system}.callPackage ./swhkd.nix { };
+      swhkd = nixpkgs.legacyPackages.${system}.callPackage ./nix{ };
     });
 
     defaultPackage = eachSystem (system: self.packages.${system}.swhkd);
@@ -56,5 +56,7 @@
         ];
       };
     });
+
+    nixosModules.default = import ./nix/module.nix inputs;
   };
 }
