@@ -7,7 +7,7 @@ We have packaged `swhkd-git`. `swhkd-bin` has been packaged separately by a user
 Basic installation and autorun on NixOS
 ```nix
 # Add inputs to your flake
-  inputs.swhkd.url = "github:waycrate/swhkd";
+  inputs.swhkd.url = "github:id3v1669/swhkd";
   inputs.swhkd.inputs.nixpkgs.follows = "nixpkgs";
 ...
 # Add package to your configuration
@@ -62,7 +62,7 @@ After that add 'swhks &' to autorun of your desktop enviroment or window manager
 
 # Compiling:
 
--   `git clone https://github.com/waycrate/swhkd;cd swhkd`
+-   `git clone https://github.com/id3v1669/swhkd;cd swhkd`
 -   `make setup`
 -   `make clean`
 -   `make`
