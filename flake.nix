@@ -22,10 +22,10 @@
   in 
   {
     packages = eachSystem (system: {
-      swhkd = nixpkgs.legacyPackages.${system}.callPackage ./nix{ };
+      default = nixpkgs.legacyPackages.${system}.callPackage ./nix{ };
     });
 
-    defaultPackage = eachSystem (system: self.packages.${system}.swhkd);
+    defaultPackage = eachSystem (system: self.packages.${system}.default);
 
     devShells = eachSystem (system:
     let 
