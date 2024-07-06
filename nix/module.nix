@@ -50,7 +50,7 @@ in {
       description = "Simple Wayland HotKey Daemon";
       bindsTo = [ "${cfg.target}"];
       script = ''
-        /run/wrappers/bin/pkexec ${pkgs.over-swhkd}/bin/swhkd \
+        /run/wrappers/bin/pkexec ${cfg.package}/bin/swhkd \
           --config ${cfg.configPath} \
           --cooldown ${toString cfg.cooldown}
       '';
