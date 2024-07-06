@@ -13,7 +13,7 @@ use std::{
     path::{Path, PathBuf},
     process::{exit, id, Command, Stdio},
 };
-use sysinfo::{ProcessExt, System, SystemExt};
+use sysinfo::System;
 
 mod environ;
 
@@ -85,7 +85,7 @@ fn main() -> std::io::Result<()> {
         let mut sys = System::new_all();
         sys.refresh_all();
         for (pid, process) in sys.processes() {
-            if pid.to_string() == swhks_pid && process.exe() == env::current_exe().unwrap() {
+            if pid.to_string() == swhks_pid && process.exe() == env::current_exe().unwrap().parent() {
                 log::error!("Server is already running!");
                 exit(1);
             }

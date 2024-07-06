@@ -164,6 +164,7 @@ impl PartialEq for KeyBinding {
 
 pub trait Prefix {
     fn send(self) -> Self;
+    #[cfg(test)]
     fn on_release(self) -> Self;
 }
 
@@ -189,6 +190,7 @@ impl Prefix for KeyBinding {
         self.send = true;
         self
     }
+    #[cfg(test)]
     fn on_release(mut self) -> Self {
         self.on_release = true;
         self
@@ -241,6 +243,7 @@ impl Prefix for Hotkey {
         self.keybinding.send = true;
         self
     }
+    #[cfg(test)]
     fn on_release(mut self) -> Self {
         self.keybinding.on_release = true;
         self

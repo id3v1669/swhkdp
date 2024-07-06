@@ -4,7 +4,7 @@ use config::Hotkey;
 use evdev::{AttributeSet, Device, InputEventKind, Key};
 use nix::{
     sys::stat::{umask, Mode},
-    unistd::{Group, Uid},
+    unistd::{Group, Uid}
 };
 use signal_hook::consts::signal::*;
 use signal_hook_tokio::Signals;
@@ -19,7 +19,7 @@ use std::{
     path::{Path, PathBuf},
     process::{exit, id},
 };
-use sysinfo::{ProcessExt, System, SystemExt};
+use sysinfo::System;
 use tokio::select;
 use tokio::time::Duration;
 use tokio::time::{sleep, Instant};
@@ -470,7 +470,7 @@ pub fn setup_swhkd(invoking_uid: u32, runtime_path: String) {
         let mut sys = System::new_all();
         sys.refresh_all();
         for (pid, process) in sys.processes() {
-            if pid.to_string() == swhkd_pid && process.exe() == env::current_exe().unwrap() {
+            if pid.to_string() == swhkd_pid && process.exe() == env::current_exe().unwrap().parent() {
                 log::error!("Swhkd is already running!");
                 log::error!("pid of existing swhkd process: {}", pid.to_string());
                 log::error!("To close the existing swhkd process, run `sudo killall swhkd`");

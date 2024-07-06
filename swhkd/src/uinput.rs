@@ -3,9 +3,9 @@ use evdev::{
     AttributeSet, Key, RelativeAxisType, SwitchType,
 };
 
-use nix::ioctl_none;
-use std::fs::File;
-use std::os::unix::io::AsRawFd;
+//use nix::ioctl_none;
+//use std::fs::File;
+//use std::os::unix::io::AsRawFd;
 
 #[cfg(feature = "rfkill")]
 ioctl_none!(rfkill_noinput, b'R', 1);
