@@ -1,14 +1,14 @@
 <p align=center>
-  <img src="https://git.sr.ht/~shinyzenith/swhkd/blob/main/assets/swhkd.png" alt=SWHKD width=60%>
+  <img src="https://github.com/id3v1669/id3v1669/assets/swhkd.png" alt=SWHKD width=60%>
 
   <p align="center">A next-generation hotkey daemon for Wayland/X11 written in <a href="https://www.rust-lang.org/">Rust</a>.</p>
 
   <p align="center">
-  <a href="./LICENSE.md"><img src="https://img.shields.io/github/license/waycrate/swhkd?style=flat-square&logo=appveyor"></a>
+  <a href="./LICENSE.md"><img src="https://img.shields.io/github/license/id3v1669/swhkd?style=flat-square&logo=appveyor"></a>
   <img src="https://img.shields.io/badge/cargo-v1.2.1-green?style=flat-square&logo=appveyor">
-  <img src="https://img.shields.io/github/issues/waycrate/swhkd?style=flat-square&logo=appveyor">
-  <img src="https://img.shields.io/github/forks/waycrate/swhkd?style=flat-square&logo=appveyor">
-  <img src="https://img.shields.io/github/stars/waycrate/swhkd?style=flat-square&logo=appveyor">
+  <img src="https://img.shields.io/github/issues/id3v1669/swhkd?style=flat-square&logo=appveyor">
+  <img src="https://img.shields.io/github/forks/id3v1669/swhkd?style=flat-square&logo=appveyor">
+  <img src="https://img.shields.io/github/stars/id3v1669/swhkd?style=flat-square&logo=appveyor">
   </p>
 </p>
 
@@ -65,10 +65,10 @@ All supported key and modifier names are listed in `man 5 swhkd-keys`.
 ### To autostart `swhkd` you can do one of two things
 
 1. Add the commands from the ["Running"
-   section](https://github.com/waycrate/swhkd#running) to your window managers
+   section](https://github.com/id3v1669/swhkd#running) to your window managers
    configuration file.
 1. Enable the [service
-   file](https://github.com/waycrate/swhkd/tree/main/contrib/init) for your
+   file](https://github.com/id3v1669/swhkd/tree/master/contrib/init) for your
    respective init system. Currently, only systemd and OpenRC service files
    exist and more will be added soon including Runit.
 
@@ -92,8 +92,8 @@ So yes, you're safe!
 
 ## Contributors
 
-<a href="https://github.com/Shinyzenith/swhkd/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=waycrate/swhkd" />
+<a href="https://github.com/id3v1669/swhkd/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=id3v1669/swhkd" />
 </a>
 
 ## Supporters:

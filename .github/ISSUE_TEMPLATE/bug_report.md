@@ -3,7 +3,7 @@ name: Bug report
 about: swhkd bugs
 title: ""
 labels: bug
-assignees: angelofallars, Shinyzenith, EdenQwQ
+assignees: id3v1669
 ---
 
 **Version Information:**

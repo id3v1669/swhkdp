@@ -71,7 +71,7 @@ it is already good enough to use
 
 # Compiling:
 
--   `git clone https://github.com/waycrate/swhkd;cd swhkd`
+-   `git clone https://github.com/id3v1669/swhkd;cd swhkd`
 -   `make setup`
 -   `make clean`
 -   `make`

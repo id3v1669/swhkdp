@@ -1,4 +1,4 @@
-swhkd(5) "github.com/waycrate/swhkd" "File Formats Manual"
+swhkd(5) "github.com/id3v1669/swhkd" "File Formats Manual"
 
 # NAME
 
@@ -166,8 +166,9 @@ swhkd	- Hotkey daemon inspired by sxhkd written in Rust
 
 # AUTHORS
 
-Maintained by Shinyzenith <aakashsensharma@gmail.com>, EdenQwQ <lsahlm1eden@gmail.com>, and Angelo Fallaria <ba.fallaria@gmail.com>.
-For more information about development, see <https://github.com/waycrate/swhkd>.
+Created by Shinyzenith <aakashsensharma@gmail.com>, EdenQwQ <lsahlm1eden@gmail.com>, and Angelo Fallaria <ba.fallaria@gmail.com>.
+Maintained by id3v1669 <id3v1669@gmail.com> as original repo looks unmaintained for now.
+For more information about development, see <https://github.com/id3v1669/swhkd>.
 
 # SEE ALSO
 

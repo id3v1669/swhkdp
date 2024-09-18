@@ -1,4 +1,4 @@
-swhkd(1) "github.com/shinyzenith/swhkd" "General Commands Manual"
+swhkd(1) "github.com/id3v1669/swhkd" "General Commands Manual"
 
 # NAME
 
@@ -38,8 +38,11 @@ More about the config file syntax in `swhkd(5)`
 *-d*, *--debug*
 	Enable debug mode.
 
-*-D, --device* <DEVICE_NAME>
+*-D, --device* <DEVICE_NAMES>
 	Manually set the keyboard devices to use. Can occur multiple times.
+
+*-I, --ignoredevice* <DEVICE_NAMES>
+	Manually set the keyboard devices to ignore. Can occur multiple times.
 
 # SIGNALS
 
@@ -49,8 +52,9 @@ More about the config file syntax in `swhkd(5)`
 
 # AUTHORS
 
-Maintained by Shinyzenith <aakashsensharma@gmail.com>, EdenQwQ <lsahlm1eden@gmail.com>, and Angelo Fallaria <ba.fallaria@gmail.com>.
-For more information about development, see <https://github.com/waycrate/swhkd>.
+Created by Shinyzenith <aakashsensharma@gmail.com>, EdenQwQ <lsahlm1eden@gmail.com>, and Angelo Fallaria <ba.fallaria@gmail.com>.
+Maintained by id3v1669 <id3v1669@gmail.com> as original repo looks unmaintained for now.
+For more information about development, see <https://github.com/id3v1669/swhkd>.
 
 # SEE ALSO
 
