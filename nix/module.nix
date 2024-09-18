@@ -1,8 +1,8 @@
-self: {
-  config,
-  lib,
-  pkgs,
-  ...
+self:
+{ config
+, lib
+, pkgs
+, ...
 }:
 let
   cfg = config.services.swhkd;
@@ -11,9 +11,8 @@ let
   inherit (lib) types;
   inherit (lib.modules) mkIf;
   inherit (lib.options) mkOption mkEnableOption;
-
-  format = pkgs.formats.ini {};
-in {
+in
+{
   options.services.swhkd = {
     enable = mkEnableOption "Simple Wayland HotKey Daemon";
 
