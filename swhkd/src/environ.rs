@@ -1,19 +1,16 @@
-use std::{
-    env::VarError,
-    path::PathBuf,
-};
+use std::{env::VarError, path::PathBuf};
 
 pub struct Env {
     pub pkexec_id: u32,
     pub config_folder_location: PathBuf,
     pub runtime_socket: PathBuf,
-    pub runtime_dir: PathBuf
+    pub runtime_dir: PathBuf,
 }
 
 #[derive(Debug)]
 pub enum EnvError {
     PkexecNotFound,
-    GenericError(String)
+    GenericError(String),
 }
 
 impl Env {

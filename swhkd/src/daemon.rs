@@ -127,7 +127,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let to_ignore =
         |dev: &Device| arg_ignore_devices.contains(&dev.name().unwrap_or("[unknown]").to_string());
 
-
     let keyboard_devices: Vec<_> = {
         if arg_add_devices.is_empty() {
             log::trace!("Attempting to find all keyboard file descriptors.");
@@ -486,7 +485,8 @@ pub fn setup_swhkd(invoking_uid: u32, runtime_path: String) {
         let mut sys = System::new_all();
         sys.refresh_all();
         for (pid, process) in sys.processes() {
-            if pid.to_string() == swhkd_pid && process.exe() == env::current_exe().unwrap().parent() {
+            if pid.to_string() == swhkd_pid && process.exe() == env::current_exe().unwrap().parent()
+            {
                 log::error!("Swhkd is already running!");
                 log::error!("pid of existing swhkd process: {}", pid.to_string());
                 log::error!("To close the existing swhkd process, run `sudo killall swhkd`");
@@ -514,7 +514,7 @@ pub fn create_default_config(invoking_uid: u32, config_file_path: &PathBuf) {
     // Initializes a default SWHKD config at specific config path
 
     perms::raise_privileges();
-    _ = match fs::File::create(&config_file_path) {
+    match fs::File::create(config_file_path) {
         Ok(mut file) => {
             log::debug!("Created default SWHKD config at: {:#?}", config_file_path);
             _ = file.write_all(b"# Comments start with #, uncomment to use \n#start a terminal\n#super + return\n#\talacritty # replace with terminal of your choice");

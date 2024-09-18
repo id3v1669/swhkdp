@@ -12,7 +12,6 @@ use std::os::unix::io::AsRawFd;
 #[cfg(feature = "rfkill")]
 ioctl_none!(rfkill_noinput, b'R', 1);
 
-
 pub fn create_uinput_device() -> Result<VirtualDevice, Box<dyn std::error::Error>> {
     let keys: AttributeSet<Key> = get_all_keys().iter().copied().collect();
 
