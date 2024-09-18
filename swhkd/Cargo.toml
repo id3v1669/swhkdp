@@ -9,6 +9,9 @@ authors = [
 	"EdenQwQ <lsahlm1eden@gmail.com>\n",
 ]
 
+[features]
+rfkill = []
+
 [build-dependencies]
 flate2 = "1.0.24"
 

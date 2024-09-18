@@ -4,6 +4,7 @@
 , pkg-config
 , udev
 , killall
+, rfkillFeature ? false
 }:
 
 rustPlatform.buildRustPackage rec {
@@ -19,6 +20,8 @@ rustPlatform.buildRustPackage rec {
       "sweet-0.3.0" = "sha256-swSE1CE39cGojp8HAziw0Bzjr+s4XaVU+4OqQDO60fE=";
     };
   };
+
+  buildFeatures = [ ] ++ lib.optional rfkillFeature "rfkill";
 
   nativeBuildInputs = [ 
     pkg-config
