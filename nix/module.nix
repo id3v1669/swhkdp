@@ -8,7 +8,7 @@ let
   cfg = config.services.swhkd;
   inherit (pkgs.stdenv.hostPlatform) system;
 
-  inherit (lib) type toFile;
+  inherit (lib) types;
   inherit (lib.modules) mkIf;
   inherit (lib.options) mkOption mkEnableOption;
 in
@@ -46,7 +46,7 @@ in
       description = "Simple Wayland HotKey Daemon";
       bindsTo = [ "default.target" ];
       script = let 
-        swhkdrc = toFile "swhkdrc" "${cfg.settings}";
+        swhkdrc = pkgs.writeText "swhkdrc" "${cfg.settings}";
         swhkdrcCmd = if cfg.settings != null then "--config ${swhkdrc}" else "";
       in ''
         /run/wrappers/bin/pkexec ${cfg.package}/bin/swhkd ${swhkdrcCmd} \
