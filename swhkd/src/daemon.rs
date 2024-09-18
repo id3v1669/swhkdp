@@ -85,14 +85,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let invoking_uid = env.pkexec_id;
 
-    setup_swhkd(invoking_uid, env.xdg_runtime_dir.clone().to_string_lossy().to_string());
+    setup_swhkd(invoking_uid, env.runtime_dir.clone().to_string_lossy().to_string());
 
     let load_config = || {
         // Drop privileges to the invoking user.
         perms::drop_privileges(invoking_uid);
 
         let config_file_path: PathBuf =
-            args.config.as_ref().map_or_else(|| env.fetch_xdg_config_path(), |file| file.clone());
+            args.config.as_ref().map_or_else(|| env.fetch_config_path(), |file| file.clone());
 
         log::debug!("Using config file path: {:#?}", config_file_path);
 
@@ -210,7 +210,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     tokio::pin!(hotkey_repeat_timer);
 
     // The socket we're sending the commands to.
-    let socket_file_path = env.fetch_xdg_runtime_socket_path();
+    let socket_file_path = env.fetch_runtime_socket_path();
     loop {
         select! {
             _ = &mut hotkey_repeat_timer, if &last_hotkey.is_some() => {

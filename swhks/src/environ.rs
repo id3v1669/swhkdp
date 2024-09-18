@@ -19,7 +19,6 @@ pub struct Env {
 pub enum EnvError {
     DataHomeNotSet,
     HomeNotSet,
-    RuntimeDirNotSet,
     PathNotFound,
     GenericError(String),
 }
@@ -49,18 +48,7 @@ impl Env {
             },
         };
 
-        let runtime_dir = match Self::get_env("XDG_RUNTIME_DIR") {
-            Ok(val) => val,
-            Err(e) => match e {
-                EnvError::RuntimeDirNotSet | EnvError::PathNotFound => {
-                    log::warn!(
-                        "XDG_RUNTIME_DIR Variable is not set, falling back on hardcoded path."
-                    );
-                    PathBuf::from(format!("/run/user/{}", unistd::Uid::current()))
-                }
-                _ => panic!("Unexpected error: {:#?}", e),
-            },
-        };
+        let runtime_dir = PathBuf::from(format!("/run/user/{}", unistd::Uid::current()));
 
         Self { data_home, home, runtime_dir }
     }
@@ -76,7 +64,6 @@ impl Env {
                 VarError::NotPresent => match name {
                     "XDG_DATA_HOME" => Err(EnvError::DataHomeNotSet),
                     "HOME" => Err(EnvError::HomeNotSet),
-                    "XDG_RUNTIME_DIR" => Err(EnvError::RuntimeDirNotSet),
                     _ => Err(EnvError::GenericError(format!("{} not set", name))),
                 },
                 VarError::NotUnicode(_) => {
