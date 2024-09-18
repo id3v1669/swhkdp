@@ -10,7 +10,7 @@
 rustPlatform.buildRustPackage rec {
 
   pname = "swhkd";
-  version = "1.3.0";
+  version = "1.3.0-git";
 
   src = lib.cleanSource ../.;
 

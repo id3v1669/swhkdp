@@ -8,7 +8,7 @@ let
   cfg = config.services.swhkd;
   inherit (pkgs.stdenv.hostPlatform) system;
 
-  inherit (lib) types;
+  inherit (lib) type toFile;
   inherit (lib.modules) mkIf;
   inherit (lib.options) mkOption mkEnableOption;
 in
@@ -34,7 +34,7 @@ in
       super + return
         alacritty
       '';
-      type = types.lines;
+      type = types.nullOr types.lines;
     };
   };
 
@@ -45,8 +45,11 @@ in
     systemd.user.services.swhkd = {
       description = "Simple Wayland HotKey Daemon";
       bindsTo = [ "default.target" ];
-      script = ''
-        /run/wrappers/bin/pkexec ${cfg.package}/bin/swhkd \
+      script = let 
+        swhkdrc = toFile "swhkdrc" "${cfg.settings}";
+        swhkdrcCmd = if cfg.settings != null then "--config ${swhkdrc}" else "";
+      in ''
+        /run/wrappers/bin/pkexec ${cfg.package}/bin/swhkd ${swhkdrcCmd} \
           --cooldown ${toString cfg.cooldown}
       '';
       serviceConfig.Restart = "always";
