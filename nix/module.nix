@@ -40,7 +40,6 @@ in
 
   config = mkIf cfg.enable {
     environment.systemPackages = [ cfg.package ];
-    environment.etc."swhkd/swhkdrc".text = cfg.settings;
 
     systemd.user.services.swhkd = {
       description = "Simple Wayland HotKey Daemon";
