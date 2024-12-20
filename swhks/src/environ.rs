@@ -9,7 +9,6 @@ use nix::unistd;
 // Contains the values of the environment variables in the form of PathBuffers.
 pub struct Env {
     pub data_home: PathBuf,
-    pub home: PathBuf,
     pub runtime_dir: PathBuf,
 }
 
@@ -29,9 +28,21 @@ impl Env {
     pub fn construct() -> Self {
         let home = match Self::get_env("HOME") {
             Ok(val) => val,
-            Err(_) => {
-                eprintln!("HOME Variable is not set/found, cannot fall back on hardcoded path for XDG_DATA_HOME.");
-                std::process::exit(1);
+            Err(e) => {
+                match e {
+                    EnvError::HomeNotSet => {
+                        log::error!("HOME Variable is not set/found, cannot fall back on hardcoded path for XDG_DATA_HOME.");
+                        std::process::exit(1);
+                    },
+                    EnvError::GenericError(err) => {
+                        log::error!("Generic error: {:#?}", err);
+                        std::process::exit(1);
+                    }
+                    _ => {
+                        log::error!("Unexpected error: {:#?}", e);
+                        std::process::exit(1);
+                    }
+                }
             }
         };
 
@@ -44,13 +55,20 @@ impl Env {
                     );
                     home.join(".local/share")
                 }
-                _ => panic!("Unexpected error: {:#?}", e),
+                EnvError::GenericError(err) => {
+                    log::error!("Generic error: {:#?}", err);
+                    std::process::exit(1);
+                }
+                _ => {
+                    log::error!("Unexpected error: {:#?}", e);
+                    std::process::exit(1);
+                }
             },
         };
 
         let runtime_dir = PathBuf::from(format!("/run/user/{}", unistd::Uid::current()));
 
-        Self { data_home, home, runtime_dir }
+        Self { data_home, runtime_dir }
     }
 
     /// Actual interface to get the environment variable.

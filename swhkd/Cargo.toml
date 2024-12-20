@@ -13,7 +13,7 @@ authors = [
 rfkill = []
 
 [build-dependencies]
-flate2 = "1.0.33"
+flate2 = "1.0.35"
 
 [dependencies]
 clap.workspace = true
@@ -27,8 +27,8 @@ itertools = "0.13.0"
 signal-hook = "0.3.17"
 signal-hook-tokio = { version = "0.3.1", features = ["futures-v0_3"] }
 sweet = { git = "https://github.com/waycrate/sweet.git", version = "0.3.0" }
-tokio = { version = "1.40.0", features = ["full"] }
-tokio-stream = "0.1.16"
+tokio = { version = "1.42.0", features = ["full"] }
+tokio-stream = "0.1.17"
 tokio-udev = "0.9.1"
 
 [[bin]]

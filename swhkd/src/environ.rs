@@ -3,7 +3,6 @@ use std::{env::VarError, path::PathBuf};
 pub struct Env {
     pub pkexec_id: u32,
     pub config_folder_location: PathBuf,
-    pub runtime_socket: PathBuf,
     pub runtime_dir: PathBuf,
 }
 
@@ -18,23 +17,25 @@ impl Env {
         let pkexec_id = match Self::get_env("PKEXEC_UID") {
             Ok(val) => match val.parse::<u32>() {
                 Ok(val) => val,
-                Err(_) => {
-                    log::error!("Failed to launch swhkd!!!");
-                    log::error!("Make sure to launch the binary with pkexec.");
-                    std::process::exit(1);
+                Err(_) => Self::pkexec_err(),
+            },
+            Err(e) => {
+                match e {
+                    EnvError::PkexecNotFound => {
+                        log::error!("PKEXEC_UID not found in environment variables.");
+                        Self::pkexec_err();
+                    },
+                    EnvError::GenericError(e) => {
+                        log::error!("Error: {}", e);
+                        Self::pkexec_err();
+                    },
                 }
             },
-            Err(_) => {
-                log::error!("Failed to launch swhkd!!!");
-                log::error!("Make sure to launch the binary with pkexec.");
-                std::process::exit(1);
-            }
         };
         let config_folder_location = PathBuf::from("/etc");
-        let runtime_socket = PathBuf::from(format!("/run/user/{}", pkexec_id));
         let runtime_dir = PathBuf::from(format!("/run/user/{}", pkexec_id));
 
-        Self { pkexec_id, config_folder_location, runtime_dir, runtime_socket }
+        Self { pkexec_id, config_folder_location, runtime_dir}
     }
 
     fn get_env(name: &str) -> Result<String, EnvError> {
@@ -58,5 +59,11 @@ impl Env {
 
     pub fn fetch_runtime_socket_path(&self) -> PathBuf {
         PathBuf::from(&self.runtime_dir).join("swhkd.sock")
+    }
+
+    pub fn pkexec_err() -> ! {
+        log::error!("Failed to launch swhkd!!!");
+        log::error!("Make sure to launch the binary with pkexec.");
+        std::process::exit(1);
     }
 }

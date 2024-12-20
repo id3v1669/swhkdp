@@ -26,6 +26,7 @@ impl PartialEq for KeyBinding {
     }
 }
 
+#[allow(dead_code)]
 pub trait Prefix {
     fn send(self) -> Self;
     fn on_release(self) -> Self;
