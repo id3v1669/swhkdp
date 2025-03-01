@@ -1,7 +1,7 @@
 use crate::config::Value;
 use clap::Parser;
 use config::Hotkey;
-use evdev::{AttributeSet, Device, InputEventKind, Key};
+use evdev::{AttributeSet, Device, EventSummary, KeyCode};
 use nix::{
     sys::stat::{umask, Mode},
     unistd::{Group, Uid},
@@ -33,7 +33,7 @@ mod uinput;
 
 struct KeyboardState {
     state_modifiers: HashSet<config::Modifier>,
-    state_keysyms: AttributeSet<evdev::Key>,
+    state_keysyms: AttributeSet<evdev::KeyCode>,
 }
 
 impl KeyboardState {
@@ -168,15 +168,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut udev =
         AsyncMonitorSocket::new(MonitorBuilder::new()?.match_subsystem("input")?.listen()?)?;
 
-    let modifiers_map: HashMap<Key, config::Modifier> = HashMap::from([
-        (Key::KEY_LEFTMETA, config::Modifier::Super),
-        (Key::KEY_RIGHTMETA, config::Modifier::Super),
-        (Key::KEY_LEFTALT, config::Modifier::Alt),
-        (Key::KEY_RIGHTALT, config::Modifier::Altgr),
-        (Key::KEY_LEFTCTRL, config::Modifier::Control),
-        (Key::KEY_RIGHTCTRL, config::Modifier::Control),
-        (Key::KEY_LEFTSHIFT, config::Modifier::Shift),
-        (Key::KEY_RIGHTSHIFT, config::Modifier::Shift),
+    let modifiers_map: HashMap<KeyCode, config::Modifier> = HashMap::from([
+        (KeyCode::KEY_LEFTMETA, config::Modifier::Super),
+        (KeyCode::KEY_RIGHTMETA, config::Modifier::Super),
+        (KeyCode::KEY_LEFTALT, config::Modifier::Alt),
+        (KeyCode::KEY_RIGHTALT, config::Modifier::Altgr),
+        (KeyCode::KEY_LEFTCTRL, config::Modifier::Control),
+        (KeyCode::KEY_RIGHTCTRL, config::Modifier::Control),
+        (KeyCode::KEY_LEFTSHIFT, config::Modifier::Shift),
+        (KeyCode::KEY_RIGHTSHIFT, config::Modifier::Shift),
     ]);
 
     let repeat_cooldown_duration: u64 = args.cooldown.unwrap_or(default_cooldown);
@@ -191,7 +191,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut pending_release: bool = false;
     let mut keyboard_states = HashMap::new();
     let mut keyboard_stream_map = StreamMap::new();
-
+    
     for (path, mut device) in keyboard_devices.into_iter() {
         let _ = device.grab();
         let path = match path.to_str() {
@@ -311,9 +311,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
             Some((node, Ok(event))) = keyboard_stream_map.next() => {
                 let keyboard_state = &mut keyboard_states.get_mut(&node).expect("device not in states map");
 
-                let key = match event.kind() {
-                    InputEventKind::Key(keycode) => keycode,
-                    InputEventKind::Switch(_) => {
+                let key = match event.destructure() {
+                    EventSummary::Key(_, keycode, _) => keycode,
+                    EventSummary::Switch(..) => {
                         uinput_switches_device.emit(&[event]).unwrap();
                         continue
                     }
@@ -437,7 +437,7 @@ pub fn check_input_group() -> Result<(), Box<dyn Error>> {
 }
 
 pub fn check_device_is_keyboard(device: &Device) -> bool {
-    if device.supported_keys().map_or(false, |keys| keys.contains(Key::KEY_ENTER)) {
+    if device.supported_keys().map_or(false, |keys| keys.contains(KeyCode::KEY_ENTER)) {
         if device.name() == Some("swhkd virtual output") {
             return false;
         }
@@ -535,23 +535,38 @@ pub fn send_command(
 ) {
     log::info!("Hotkey pressed: {:#?}", hotkey);
     let command = hotkey.command;
-    if modes[*mode_stack.last().unwrap()].options.oneoff {
+    let mut commands_to_send = String::new();
+    if modes[mode_stack[mode_stack.len() - 1]].options.oneoff {
         mode_stack.pop();
     }
-    for mode in hotkey.mode_instructions.iter() {
-        match mode {
-            sweet::ModeInstruction::Enter(name) => {
-                if let Some(mode_index) = modes.iter().position(|modename| modename.name.eq(name)) {
-                    mode_stack.push(mode_index);
-                    log::info!("Entering mode: {}", name);
+    if command.contains('@') {
+        let commands = command.split("&&").map(|s| s.trim()).collect::<Vec<_>>();
+        for cmd in commands {
+            let mut words = cmd.split_whitespace();
+            match words.next().unwrap() {
+                config::MODE_ENTER_STATEMENT => {
+                    let enter_mode = cmd.split(' ').nth(1).unwrap();
+                    for (i, mode) in modes.iter().enumerate() {
+                        if mode.name == enter_mode {
+                            mode_stack.push(i);
+                            break;
+                        }
+                    }
+                    log::info!("Entering mode: {}", modes[mode_stack[mode_stack.len() - 1]].name);
                 }
-            }
-            sweet::ModeInstruction::Escape => {
-                mode_stack.pop();
+                config::MODE_ESCAPE_STATEMENT => {
+                    mode_stack.pop();
+                }
+                _ => commands_to_send.push_str(format!("{cmd} &&").as_str()),
             }
         }
+    } else {
+        commands_to_send = command;
     }
-    if let Err(e) = socket_write(&command, socket_path.to_path_buf()) {
+    if commands_to_send.ends_with(" &&") {
+        commands_to_send = commands_to_send.strip_suffix(" &&").unwrap().to_string();
+    }
+    if let Err(e) = socket_write(&commands_to_send, socket_path.to_path_buf()) {
         log::error!("Failed to send command to swhks through IPC.");
         log::error!("Please make sure that swhks is running.");
         log::error!("Err: {:#?}", e)

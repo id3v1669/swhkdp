@@ -22,11 +22,10 @@ log.workspace = true
 nix.workspace = true
 sysinfo.workspace = true
 
-evdev = { version = "0.12.2", features = ["tokio"] }
+evdev = { version = "0.13.0", features = ["tokio", "stream-trait"] }
 itertools = "0.14.0"
 signal-hook = "0.3.17"
 signal-hook-tokio = { version = "0.3.1", features = ["futures-v0_3"] }
-sweet = { git = "https://github.com/waycrate/sweet.git", version = "0.4.0" }
 tokio = { version = "1.43.0", features = ["full"] }
 tokio-stream = "0.1.17"
 tokio-udev = "0.9.1"
