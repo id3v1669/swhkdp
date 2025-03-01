@@ -14,12 +14,7 @@ rustPlatform.buildRustPackage rec {
 
   src = lib.cleanSource ../.;
 
-  cargoLock = {
-    lockFile = "${src}/Cargo.lock";
-    outputHashes = {
-      "sweet-0.3.0" = "sha256-swSE1CE39cGojp8HAziw0Bzjr+s4XaVU+4OqQDO60fE=";
-    };
-  };
+  cargoLock.lockFile = "${src}/Cargo.lock";
 
   buildFeatures = [ ] ++ lib.optional rfkillFeature "rfkill";
 
