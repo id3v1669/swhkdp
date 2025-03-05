@@ -9,7 +9,7 @@ use nix::{
 use signal_hook::consts::signal::*;
 use signal_hook_tokio::Signals;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     env,
     error::Error,
     fs,
@@ -32,13 +32,13 @@ mod perms;
 mod uinput;
 
 struct KeyboardState {
-    state_modifiers: HashSet<config::Modifier>,
+    state_modifiers: AttributeSet<evdev::KeyCode>,
     state_keysyms: AttributeSet<evdev::KeyCode>,
 }
 
 impl KeyboardState {
     fn new() -> KeyboardState {
-        KeyboardState { state_modifiers: HashSet::new(), state_keysyms: AttributeSet::new() }
+        KeyboardState { state_modifiers: AttributeSet::new(), state_keysyms: AttributeSet::new() }
     }
 }
 
@@ -168,17 +168,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut udev =
         AsyncMonitorSocket::new(MonitorBuilder::new()?.match_subsystem("input")?.listen()?)?;
 
-    let modifiers_map: HashMap<KeyCode, config::Modifier> = HashMap::from([
-        (KeyCode::KEY_LEFTMETA, config::Modifier::Super),
-        (KeyCode::KEY_RIGHTMETA, config::Modifier::Super),
-        (KeyCode::KEY_LEFTALT, config::Modifier::Alt),
-        (KeyCode::KEY_RIGHTALT, config::Modifier::Altgr),
-        (KeyCode::KEY_LEFTCTRL, config::Modifier::Control),
-        (KeyCode::KEY_RIGHTCTRL, config::Modifier::Control),
-        (KeyCode::KEY_LEFTSHIFT, config::Modifier::Shift),
-        (KeyCode::KEY_RIGHTSHIFT, config::Modifier::Shift),
-    ]);
-
     let repeat_cooldown_duration: u64 = args.cooldown.unwrap_or(default_cooldown);
 
     let mut signals = Signals::new([
@@ -191,7 +180,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut pending_release: bool = false;
     let mut keyboard_states = HashMap::new();
     let mut keyboard_stream_map = StreamMap::new();
-    
+
     for (path, mut device) in keyboard_devices.into_iter() {
         let _ = device.grab();
         let path = match path.to_str() {
@@ -214,7 +203,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         select! {
             _ = &mut hotkey_repeat_timer, if &last_hotkey.is_some() => {
                 let hotkey = last_hotkey.clone().unwrap();
-                if hotkey.keybinding.on_release {
+                if hotkey.keybind.on_release {
                     continue;
                 }
                 send_command(hotkey.clone(), &socket_file_path, &modes, &mut mode_stack);
@@ -326,8 +315,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 match event.value() {
                     // Key press
                     1 => {
-                        if let Some(modifier) = modifiers_map.get(&key) {
-                            keyboard_state.state_modifiers.insert(*modifier);
+                        if config::ALLOWED_MODIFIERS.contains(&key) {
+                            keyboard_state.state_modifiers.insert(key);
                         } else {
                             keyboard_state.state_keysyms.insert(key);
                         }
@@ -340,13 +329,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             send_command(last_hotkey.clone().unwrap(), &socket_file_path, &modes, &mut mode_stack);
                             last_hotkey = None;
                         }
-                        if let Some(modifier) = modifiers_map.get(&key) {
+                        if config::ALLOWED_MODIFIERS.contains(&key) {
                             if let Some(hotkey) = &last_hotkey {
-                                if hotkey.modifiers().contains(modifier) {
+                                if hotkey.modifiers().contains(&key) {
                                     last_hotkey = None;
                                 }
                             }
-                            keyboard_state.state_modifiers.remove(modifier);
+                            keyboard_state.state_modifiers.remove(key);
                         } else if keyboard_state.state_keysyms.contains(key) {
                             if let Some(hotkey) = &last_hotkey {
                                 if key == hotkey.keysym() {
@@ -361,15 +350,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 }
 
                 let possible_hotkeys: Vec<&config::Hotkey> = modes[mode_stack[mode_stack.len() - 1]].hotkeys.iter()
-                    .filter(|hotkey| hotkey.modifiers().len() == keyboard_state.state_modifiers.len())
+                    .filter(|hotkey| hotkey.modifiers().len() == keyboard_state.state_modifiers.iter().count())
                     .collect();
 
                 let event_in_hotkeys = modes[mode_stack[mode_stack.len() - 1]].hotkeys.iter().any(|hotkey| {
                     hotkey.keysym().code() == event.code() &&
-                        (!keyboard_state.state_modifiers.is_empty() && hotkey.modifiers().contains(&config::Modifier::Any) || keyboard_state.state_modifiers
+                        (keyboard_state.state_modifiers
                         .iter()
-                        .all(|x| hotkey.modifiers().contains(x)) &&
-                    keyboard_state.state_modifiers.len() == hotkey.modifiers().len())
+                        .all(|x| hotkey.modifiers().contains(&x)) &&
+                    keyboard_state.state_modifiers.iter().len() == hotkey.modifiers().len())
                     && !hotkey.is_send()
                         });
 
@@ -390,8 +379,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
                 for hotkey in possible_hotkeys {
                     // this should check if state_modifiers and hotkey.modifiers have the same elements
-                    if (!keyboard_state.state_modifiers.is_empty() && hotkey.modifiers().contains(&config::Modifier::Any) || keyboard_state.state_modifiers.iter().all(|x| hotkey.modifiers().contains(x))
-                        && keyboard_state.state_modifiers.len() == hotkey.modifiers().len())
+                    if (keyboard_state.state_modifiers.iter().all(|x| hotkey.modifiers().contains(&x))
+                        && keyboard_state.state_modifiers.iter().len() == hotkey.modifiers().len())
                         && keyboard_state.state_keysyms.contains(hotkey.keysym())
                     {
                         last_hotkey = Some(hotkey.clone());

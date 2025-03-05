@@ -24,6 +24,9 @@ sysinfo.workspace = true
 
 evdev = { version = "0.13.0", features = ["tokio", "stream-trait"] }
 itertools = "0.14.0"
+regex = "1.11.1"
+serde = { version = "1.0.218", features = ["derive"] }
+serde_yml = "0.0.12"
 signal-hook = "0.3.17"
 signal-hook-tokio = { version = "0.3.1", features = ["futures-v0_3"] }
 tokio = { version = "1.43.0", features = ["full"] }

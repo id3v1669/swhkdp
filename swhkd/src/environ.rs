@@ -19,23 +19,21 @@ impl Env {
                 Ok(val) => val,
                 Err(_) => Self::pkexec_err(),
             },
-            Err(e) => {
-                match e {
-                    EnvError::PkexecNotFound => {
-                        log::error!("PKEXEC_UID not found in environment variables.");
-                        Self::pkexec_err();
-                    },
-                    EnvError::GenericError(e) => {
-                        log::error!("Error: {}", e);
-                        Self::pkexec_err();
-                    },
+            Err(e) => match e {
+                EnvError::PkexecNotFound => {
+                    log::error!("PKEXEC_UID not found in environment variables.");
+                    Self::pkexec_err();
+                }
+                EnvError::GenericError(e) => {
+                    log::error!("Error: {}", e);
+                    Self::pkexec_err();
                 }
             },
         };
         let config_folder_location = PathBuf::from("/etc");
         let runtime_dir = PathBuf::from(format!("/run/user/{}", pkexec_id));
 
-        Self { pkexec_id, config_folder_location, runtime_dir}
+        Self { pkexec_id, config_folder_location, runtime_dir }
     }
 
     fn get_env(name: &str) -> Result<String, EnvError> {
