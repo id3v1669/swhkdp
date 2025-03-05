@@ -6,6 +6,7 @@ self:
 }:
 let
   cfg = config.services.swhkd;
+  format = pkgs.formats.yaml { };
   inherit (pkgs.stdenv.hostPlatform) system;
 
   inherit (lib) types;
@@ -30,11 +31,18 @@ in
 
     settings = mkOption {
       description = "The config to use for `swhkd` syntax and samples could found in [repo](https://github.com/id3v1669/swhkd).";
-      default = ''
-      super + return
-        alacritty
-      '';
-      type = types.nullOr types.lines;
+      type = format.type;
+      default = {
+        modes = {
+          normal = {
+            swallow = false;
+            oneoff = false;
+            hotkeys = {
+              "KEY_LEFTMETA+KEY_LEFTSHIFT+KEY_T".action = "alacritty";
+            };
+          };
+        };
+      };
     };
   };
 
@@ -45,7 +53,7 @@ in
       description = "Simple Wayland HotKey Daemon";
       bindsTo = [ "default.target" ];
       script = let 
-        swhkdrc = pkgs.writeText "swhkdrc" "${cfg.settings}";
+        swhkdrc = pkgs.writeText "swhkd.yml" "${lib.generators.toYAML { } cfg.settings}";
         swhkdrcCmd = if cfg.settings != null then "--config ${swhkdrc}" else "";
       in ''
         /run/wrappers/bin/pkexec ${cfg.package}/bin/swhkd ${swhkdrcCmd} \
