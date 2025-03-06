@@ -109,11 +109,10 @@ pub fn load(path: &Path) -> Result<Vec<Mode>, Error> {
             let mut commands: Vec<String> = Vec::new();
             let keycodes: String = keycodes.chars().filter(|&c| c != ' ' && c != '\t').collect();
             let objects = keycodes.split('+').collect::<Vec<_>>();
-            if objects.len() < 2
-                && command.action_type.clone().unwrap_or("command".to_string()) == "command"
-            {
+            let action_type = command.action_type.clone().unwrap_or("command".to_string());
+            if (objects.len() < 2 && action_type == "command") || action_type != "singlecommand" {
                 log::warn!(
-                    "Invalid keycodes line, command must contain at least 2 keycodes: {:?}",
+                    "Invalid keycodes line, action_type \"command\" must contain >2 keycodes or choose action_type \"singlecommand\": {:?}",
                     keycodes
                 );
                 continue;
@@ -135,14 +134,12 @@ pub fn load(path: &Path) -> Result<Vec<Mode>, Error> {
                 Err(_) => log::warn!("Failed parsing modifiers for keycodes line: {:?}", keycodes),
             }
             let keys_string = objects.last().unwrap();
-            if keys_string.chars().next().unwrap() == '{'
-                && keys_string.chars().last().unwrap() == '}'
-            {
+            if keys_string.starts_with('{') && keys_string.ends_with('}') {
                 let keys_vec_string =
                     keys_string[1..keys_string.len() - 1].split(',').collect::<Vec<_>>();
                 for key_string in keys_vec_string {
                     if !key_string.contains('-') {
-                        match KeyCode::from_str(&key_string) {
+                        match KeyCode::from_str(key_string) {
                             Ok(key) => keys.push(key),
                             Err(_) => log::warn!("Failed to parse key: {:?}", key_string),
                         }
@@ -153,14 +150,14 @@ pub fn load(path: &Path) -> Result<Vec<Mode>, Error> {
                         log::warn!("Invalid range for keys: {:?}", key_string);
                         continue;
                     }
-                    let rfrom = match KeyCode::from_str(&range[0]) {
+                    let rfrom = match KeyCode::from_str(range[0]) {
                         Ok(key) => key,
                         Err(_) => {
                             log::warn!("Failed to parse key: {:?}", range[0]);
                             continue;
                         }
                     };
-                    let rto = match KeyCode::from_str(&range[1]) {
+                    let rto = match KeyCode::from_str(range[1]) {
                         Ok(key) => key,
                         Err(_) => {
                             log::warn!("Failed to parse key: {:?}", range[1]);
@@ -175,7 +172,7 @@ pub fn load(path: &Path) -> Result<Vec<Mode>, Error> {
                 let re = regex::Regex::new(&pattern).unwrap();
                 let pattern_from_action_orig: String =
                     re.find_iter(&command.action).map(|m| m.as_str().to_string()).collect();
-                if pattern_from_action_orig == "" {
+                if pattern_from_action_orig.is_empty() {
                     log::debug!("Failed to find pattern in action: {:?}", command.action);
                     continue;
                 }

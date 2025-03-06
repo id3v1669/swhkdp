@@ -38,10 +38,10 @@ More about the config file syntax in `swhkd(5)`
 	Enable debug mode.
 
 *-D, --device* <DEVICE_NAMES>
-	Manually set the keyboard devices to use. Can occur multiple times.
+	Manually set the supported devices to use. Can occur multiple times.
 
 *-I, --ignoredevice* <DEVICE_NAMES>
-	Manually set the keyboard devices to ignore. Can occur multiple times.
+	Manually set the supported devices to ignore. Can occur multiple times.
 
 # SIGNALS
 

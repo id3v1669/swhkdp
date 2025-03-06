@@ -1,6 +1,6 @@
 # Contributing to swhkd
 
-1. Fork the repo and create your branch from `main`.
+1. Fork the repo and create your branch from `master`.
 1. Make sure to write tests for the functions you make.
 1. Run `make check` once you're done and ensure the test suite passes.
 

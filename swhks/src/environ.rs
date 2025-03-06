@@ -28,22 +28,20 @@ impl Env {
     pub fn construct() -> Self {
         let home = match Self::get_env("HOME") {
             Ok(val) => val,
-            Err(e) => {
-                match e {
-                    EnvError::HomeNotSet => {
-                        log::error!("HOME Variable is not set/found, cannot fall back on hardcoded path for XDG_DATA_HOME.");
-                        std::process::exit(1);
-                    },
-                    EnvError::GenericError(err) => {
-                        log::error!("Generic error: {:#?}", err);
-                        std::process::exit(1);
-                    }
-                    _ => {
-                        log::error!("Unexpected error: {:#?}", e);
-                        std::process::exit(1);
-                    }
+            Err(e) => match e {
+                EnvError::HomeNotSet => {
+                    log::error!("HOME Variable is not set/found, cannot fall back on hardcoded path for XDG_DATA_HOME.");
+                    std::process::exit(1);
                 }
-            }
+                EnvError::GenericError(err) => {
+                    log::error!("Generic error: {:#?}", err);
+                    std::process::exit(1);
+                }
+                _ => {
+                    log::error!("Unexpected error: {:#?}", e);
+                    std::process::exit(1);
+                }
+            },
         };
 
         let data_home = match Self::get_env("XDG_DATA_HOME") {

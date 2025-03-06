@@ -31,14 +31,14 @@ mod environ;
 mod perms;
 mod uinput;
 
-struct KeyboardState {
-    state_modifiers: AttributeSet<evdev::KeyCode>,
-    state_keysyms: AttributeSet<evdev::KeyCode>,
+struct DeviceState {
+    state_modifiers: AttributeSet<KeyCode>,
+    state_keysyms: AttributeSet<KeyCode>,
 }
 
-impl KeyboardState {
-    fn new() -> KeyboardState {
-        KeyboardState { state_modifiers: AttributeSet::new(), state_keysyms: AttributeSet::new() }
+impl DeviceState {
+    fn new() -> DeviceState {
+        DeviceState { state_modifiers: AttributeSet::new(), state_keysyms: AttributeSet::new() }
     }
 }
 
@@ -127,23 +127,29 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let to_ignore =
         |dev: &Device| arg_ignore_devices.contains(&dev.name().unwrap_or("[unknown]").to_string());
 
-    let keyboard_devices: Vec<_> = {
+    let supported_devices: Vec<_> = {
         if arg_add_devices.is_empty() {
-            log::trace!("Attempting to find all keyboard file descriptors.");
+            log::trace!("Attempting to find all supported devices file descriptors.");
             evdev::enumerate()
-                .filter(|(_, dev)| !to_ignore(dev) && check_device_is_keyboard(dev))
+                .filter(|(_, dev)| !to_ignore(dev) && check_device_is_supported(dev))
                 .collect()
         } else {
             evdev::enumerate().filter(|(_, dev)| !to_ignore(dev) && to_add(dev)).collect()
         }
     };
 
-    if keyboard_devices.is_empty() {
-        log::error!("No valid keyboard device was detected!");
+    //printing all supported devices
+    for (path, device) in supported_devices.iter() {
+        log::info!("Supported device: {}", device.name().unwrap_or("[unknown]"));
+        log::info!("Path: {}", path.to_str().unwrap());
+    }
+
+    if supported_devices.is_empty() {
+        log::error!("No valid device was detected!");
         exit(1);
     }
 
-    log::debug!("{} Keyboard device(s) detected.", keyboard_devices.len());
+    log::debug!("Supported device(s) detected: {}", supported_devices.len());
 
     // Apparently, having a single uinput device with keys, relative axes and switches
     // prevents some libraries to listen to these events. The easy fix is to have separate
@@ -178,10 +184,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut execution_is_paused = false;
     let mut last_hotkey: Option<config::Hotkey> = None;
     let mut pending_release: bool = false;
-    let mut keyboard_states = HashMap::new();
-    let mut keyboard_stream_map = StreamMap::new();
+    let mut device_states = HashMap::new();
+    let mut device_stream_map = StreamMap::new();
 
-    for (path, mut device) in keyboard_devices.into_iter() {
+    for (path, mut device) in supported_devices.into_iter() {
         let _ = device.grab();
         let path = match path.to_str() {
             Some(p) => p,
@@ -189,8 +195,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 continue;
             }
         };
-        keyboard_states.insert(path.to_string(), KeyboardState::new());
-        keyboard_stream_map.insert(path.to_string(), device.into_event_stream()?);
+        device_states.insert(path.to_string(), DeviceState::new());
+        device_stream_map.insert(path.to_string(), device.into_event_stream()?);
     }
 
     // The initial sleep duration is never read because last_hotkey is initialized to None
@@ -214,14 +220,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 match signal {
                     SIGUSR1 => {
                         execution_is_paused = true;
-                        for mut device in evdev::enumerate().map(|(_, device)| device).filter(check_device_is_keyboard) {
+                        for mut device in evdev::enumerate().map(|(_, device)| device).filter(check_device_is_supported) {
                             let _ = device.ungrab();
                         }
                     }
 
                     SIGUSR2 => {
                         execution_is_paused = false;
-                        for mut device in evdev::enumerate().map(|(_, device)| device).filter(check_device_is_keyboard) {
+                        for mut device in evdev::enumerate().map(|(_, device)| device).filter(check_device_is_supported) {
                             let _ = device.grab();
                         }
                     }
@@ -232,7 +238,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     }
 
                     SIGINT => {
-                        for mut device in evdev::enumerate().map(|(_, device)| device).filter(check_device_is_keyboard) {
+                        for mut device in evdev::enumerate().map(|(_, device)| device).filter(check_device_is_supported) {
                             let _ = device.ungrab();
                         }
                         log::warn!("Received SIGINT signal, exiting...");
@@ -240,7 +246,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     }
 
                     _ => {
-                        for mut device in evdev::enumerate().map(|(_, device)| device).filter(check_device_is_keyboard) {
+                        for mut device in evdev::enumerate().map(|(_, device)| device).filter(check_device_is_supported) {
                             let _ = device.ungrab();
                         }
 
@@ -275,18 +281,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             },
                             Ok(device) => device
                         };
-                        if !to_ignore(&device) && (to_add(&device) || check_device_is_keyboard(&device)) {
+                        if !to_ignore(&device) && (to_add(&device) || check_device_is_supported(&device)) {
                             let name = device.name().unwrap_or("[unknown]");
                             log::info!("Device '{}' at '{}' added.", name, node);
                             let _ = device.grab();
-                            keyboard_states.insert(node.to_string(), KeyboardState::new());
-                            keyboard_stream_map.insert(node.to_string(), device.into_event_stream()?);
+                            device_states.insert(node.to_string(), DeviceState::new());
+                            device_stream_map.insert(node.to_string(), device.into_event_stream()?);
                         }
                     }
                     EventType::Remove => {
-                        if keyboard_stream_map.contains_key(node) {
-                            keyboard_states.remove(node);
-                            let stream = keyboard_stream_map.remove(node).expect("device not in stream_map");
+                        if device_stream_map.contains_key(node) {
+                            device_states.remove(node);
+                            let stream = device_stream_map.remove(node).expect("device not in stream_map");
                             let name = stream.device().name().unwrap_or("[unknown]");
                             log::info!("Device '{}' at '{}' removed", name, node);
                         }
@@ -297,13 +303,23 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 }
             }
 
-            Some((node, Ok(event))) = keyboard_stream_map.next() => {
-                let keyboard_state = &mut keyboard_states.get_mut(&node).expect("device not in states map");
-
+            Some((node, Ok(event))) = device_stream_map.next() => {
+                let device_state = &mut device_states.get_mut(&node).expect("device not in states map");
                 let key = match event.destructure() {
-                    EventSummary::Key(_, keycode, _) => keycode,
+                    EventSummary::Key(_, keycode, _) => {
+                        keycode
+                    },
                     EventSummary::Switch(..) => {
                         uinput_switches_device.emit(&[event]).unwrap();
+                        continue
+                    }
+                    EventSummary::RelativeAxis(_, rlcode, _) => {
+                        match rlcode {
+                            // temp solution for double input on mouse wheel
+                            // TODO: use REL_WHEEL_HI_RES by default and fallback to REL_WHEEL if not supported by device
+                            evdev::RelativeAxisCode::REL_WHEEL_HI_RES => {}
+                            _ => uinput_device.emit(&[event]).unwrap(),
+                        }
                         continue
                     }
                     _ => {
@@ -316,9 +332,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     // Key press
                     1 => {
                         if config::ALLOWED_MODIFIERS.contains(&key) {
-                            keyboard_state.state_modifiers.insert(key);
+                            device_state.state_modifiers.insert(key);
                         } else {
-                            keyboard_state.state_keysyms.insert(key);
+                            device_state.state_keysyms.insert(key);
                         }
                     }
 
@@ -335,30 +351,29 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                     last_hotkey = None;
                                 }
                             }
-                            keyboard_state.state_modifiers.remove(key);
-                        } else if keyboard_state.state_keysyms.contains(key) {
+                            device_state.state_modifiers.remove(key);
+                        } else if device_state.state_keysyms.contains(key) {
                             if let Some(hotkey) = &last_hotkey {
                                 if key == hotkey.keysym() {
                                     last_hotkey = None;
                                 }
                             }
-                            keyboard_state.state_keysyms.remove(key);
+                            device_state.state_keysyms.remove(key);
                         }
                     }
-
                     _ => {}
                 }
 
                 let possible_hotkeys: Vec<&config::Hotkey> = modes[mode_stack[mode_stack.len() - 1]].hotkeys.iter()
-                    .filter(|hotkey| hotkey.modifiers().len() == keyboard_state.state_modifiers.iter().count())
+                    .filter(|hotkey| hotkey.modifiers().len() == device_state.state_modifiers.iter().count())
                     .collect();
 
                 let event_in_hotkeys = modes[mode_stack[mode_stack.len() - 1]].hotkeys.iter().any(|hotkey| {
                     hotkey.keysym().code() == event.code() &&
-                        (keyboard_state.state_modifiers
+                        (device_state.state_modifiers
                         .iter()
                         .all(|x| hotkey.modifiers().contains(&x)) &&
-                    keyboard_state.state_modifiers.iter().len() == hotkey.modifiers().len())
+                    device_state.state_modifiers.iter().len() == hotkey.modifiers().len())
                     && !hotkey.is_send()
                         });
 
@@ -373,15 +388,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     continue;
                 }
 
-                log::debug!("state_modifiers: {:#?}", keyboard_state.state_modifiers);
-                log::debug!("state_keysyms: {:#?}", keyboard_state.state_keysyms);
-                log::debug!("hotkey: {:#?}", possible_hotkeys);
+                log::debug!("state_modifiers: {:#?}", device_state.state_modifiers);
+                log::debug!("state_keysyms: {:#?}", device_state.state_keysyms);
+                //log::debug!("hotkey: {:#?}", possible_hotkeys);
 
                 for hotkey in possible_hotkeys {
                     // this should check if state_modifiers and hotkey.modifiers have the same elements
-                    if (keyboard_state.state_modifiers.iter().all(|x| hotkey.modifiers().contains(&x))
-                        && keyboard_state.state_modifiers.iter().len() == hotkey.modifiers().len())
-                        && keyboard_state.state_keysyms.contains(hotkey.keysym())
+                    if (device_state.state_modifiers.iter().all(|x| hotkey.modifiers().contains(&x))
+                        && device_state.state_modifiers.iter().len() == hotkey.modifiers().len())
+                        && device_state.state_keysyms.contains(hotkey.keysym())
                     {
                         last_hotkey = Some(hotkey.clone());
                         if pending_release { break; }
@@ -425,12 +440,12 @@ pub fn check_input_group() -> Result<(), Box<dyn Error>> {
     }
 }
 
-pub fn check_device_is_keyboard(device: &Device) -> bool {
-    if device.supported_keys().map_or(false, |keys| keys.contains(KeyCode::KEY_ENTER)) {
+pub fn check_device_is_supported(device: &Device) -> bool {
+    if device.supported_events().contains(evdev::EventType::KEY) {
         if device.name() == Some("swhkd virtual output") {
             return false;
         }
-        log::debug!("Keyboard: {}", device.name().unwrap(),);
+        log::debug!("Device: {}", device.name().unwrap(),);
         true
     } else {
         log::trace!("Other: {}", device.name().unwrap(),);
