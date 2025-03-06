@@ -110,7 +110,9 @@ pub fn load(path: &Path) -> Result<Vec<Mode>, Error> {
             let keycodes: String = keycodes.chars().filter(|&c| c != ' ' && c != '\t').collect();
             let objects = keycodes.split('+').collect::<Vec<_>>();
             let action_type = command.action_type.clone().unwrap_or("command".to_string());
-            if (objects.len() < 2 && action_type == "command") || action_type != "singlecommand" {
+            if (objects.len() < 2 && action_type == "command")
+                || (objects.len() != 1 && action_type == "singlecommand")
+            {
                 log::warn!(
                     "Invalid keycodes line, action_type \"command\" must contain >2 keycodes or choose action_type \"singlecommand\": {:?}",
                     keycodes
