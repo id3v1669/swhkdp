@@ -1,4 +1,4 @@
-# Contributing to swhkd
+# Contributing to swhkdp
 
 1. Fork the repo and create your branch from `master`.
 1. Make sure to write tests for the functions you make.

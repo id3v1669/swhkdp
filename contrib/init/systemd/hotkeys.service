@@ -1,5 +1,5 @@
 [Unit]
-Description=swhkd hotkey daemon
+Description=swhkdp hotkey daemon
 BindsTo=default.target
 
 [Service]

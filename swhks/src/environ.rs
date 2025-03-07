@@ -30,7 +30,9 @@ impl Env {
             Ok(val) => val,
             Err(e) => match e {
                 EnvError::HomeNotSet => {
-                    log::error!("HOME Variable is not set/found, cannot fall back on hardcoded path for XDG_DATA_HOME.");
+                    log::error!(
+                        "HOME Variable is not set/found, cannot fall back on hardcoded path for XDG_DATA_HOME."
+                    );
                     std::process::exit(1);
                 }
                 EnvError::GenericError(err) => {

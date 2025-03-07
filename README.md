@@ -1,30 +1,30 @@
 <p align=center>
-  <img src="https://github.com/id3v1669/id3v1669/assets/swhkd.png" alt=SWHKD width=60%>
+  <img src="https://github.com/id3v1669/id3v1669/assets/swhkdp.png" alt=swhkdp width=60%>
 
   <p align="center">A next-generation hotkey daemon for Wayland/X11 written in <a href="https://www.rust-lang.org/">Rust</a>.</p>
 
   <p align="center">
-  <a href="./LICENSE.md"><img src="https://img.shields.io/github/license/id3v1669/swhkd?style=flat-square&logo=appveyor"></a>
+  <a href="./LICENSE.md"><img src="https://img.shields.io/github/license/id3v1669/swhkdp?style=flat-square&logo=appveyor"></a>
   <img src="https://img.shields.io/badge/cargo-v1.2.1-green?style=flat-square&logo=appveyor">
-  <img src="https://img.shields.io/github/issues/id3v1669/swhkd?style=flat-square&logo=appveyor">
-  <img src="https://img.shields.io/github/forks/id3v1669/swhkd?style=flat-square&logo=appveyor">
-  <img src="https://img.shields.io/github/stars/id3v1669/swhkd?style=flat-square&logo=appveyor">
+  <img src="https://img.shields.io/github/issues/id3v1669/swhkdp?style=flat-square&logo=appveyor">
+  <img src="https://img.shields.io/github/forks/id3v1669/swhkdp?style=flat-square&logo=appveyor">
+  <img src="https://img.shields.io/github/stars/id3v1669/swhkdp?style=flat-square&logo=appveyor">
   </p>
 </p>
 
-## SWHKD
+## swhkdp
 
-**S**imple **W**ayland **H**ot**K**ey **D**aemon
+**S**imple **W**ayland **H**ot**K**ey **D**aemon **P**olkit
 
-`swhkd` is a display protocol-independent hotkey daemon made in
-[Rust](https://www.rust-lang.org). `swhkd` uses an easy-to-use configuration
+Originally forked from [swhkd](https://github.com/waycrate/swhkd), deattached 
+from the original repo due to the desire to keep the Polkit security model and improve repo discoverability.
+
+`swhkdp` is a display protocol-independent hotkey daemon made in
+[Rust](https://www.rust-lang.org). `swhkdp` uses an easy-to-use configuration
 system inspired by `sxhkd`, so you can easily add or remove hotkeys.
 
-It also attempts to be a drop-in replacement for `sxhkd`, meaning your `sxhkd`
-config file is also compatible with `swhkd`.
-
-Because `swhkd` can be used anywhere, the same `swhkd` config can be used across
-Xorg or Wayland desktops, and you can even use `swhkd` in a TTY.
+Because `swhkdp` can be used anywhere, the same `swhkdp` config can be used across
+Xorg or Wayland desktops, and you can even use `swhkdp` in a TTY.
 
 ## Installation and Building
 
@@ -34,47 +34,44 @@ Xorg or Wayland desktops, and you can even use `swhkd` in a TTY.
 
 ```bash
 swhks &
-pkexec swhkd
+pkexec swhkdp
 ```
 
 ## Runtime signals
 
-After opening `swhkd`, you can control the program through signals:
+After opening `swhkdp`, you can control the program through signals:
 
-- `sudo pkill -USR1 swhkd` — Pause key checking
-- `sudo pkill -USR2 swhkd` — Resume key checking
-- `sudo pkill -HUP swhkd` — Reload config file
+- `sudo pkill -USR1 swhkdp` — Pause key checking
+- `sudo pkill -USR2 swhkdp` — Resume key checking
+- `sudo pkill -HUP swhkdp` — Reload config file
 
 ## Configuration
 
-`swhkd` closely follows `sxhkd` syntax, so most existing `sxhkd` configs should
-be functional with `swhkd`.
+`swhkdp` uses configuration files that follows yml or json syntax, [detailed
+instructions can be found in CONFIGURATION.md](./CONFIGURATION.md)
 
-The default configuration file is in `/etc/swhkd/swhkdrc`. If you don't like
+The default configuration file is in `/etc/swhkdp/swhkdp.yml`. If you don't like
 having to edit the file as root every single time, you can create a symlink from
-`~/.config/swhkd/swhkdrc` to `/etc/swhkd/swhkdrc`.
+`~/.config/swhkdp/swhkdp.yml` to `/etc/swhkdp/swhkdp.yml`.
 
-If you use Vim, you can get `swhkd` config syntax highlighting with the
-[swhkd-vim](https://github.com/waycrate/swhkd-vim) plugin. Install it in
-vim-plug with `Plug 'waycrate/swhkd-vim'`.
-
-All supported key and modifier names are listed in `man 5 swhkd-keys`.
+Not sure what key to use, launch swhkdp with -d option and press needed key,
+it will be shown in logs as `DEBUG swhkdp] Key: KEY_C`
 
 ## Autostart
 
-### To autostart `swhkd` you can do one of two things
+### To autostart `swhkdp` you can do one of two things
 
 1. Add the commands from the ["Running"
-   section](https://github.com/id3v1669/swhkd#running) to your window managers
+   section](https://github.com/id3v1669/swhkdp#running) to your window managers
    configuration file.
 1. Enable the [service
-   file](https://github.com/id3v1669/swhkd/tree/master/contrib/init) for your
+   file](https://github.com/id3v1669/swhkdp/tree/master/contrib/init) for your
    respective init system. Currently, only systemd and OpenRC service files
    exist and more will be added soon including Runit.
 
 ## Security
 
-We use a server-client model to keep you safe. The daemon (`swhkd` — privileged
+We use a server-client model to keep you safe. The daemon (`swhkdp` — privileged
 process) communicates to the server (`swhks` — running as non-root user) after
 checking for valid keybindings. Since the daemon is totally separate from the
 server, no other process can read your keystrokes. As for shell commands, you
@@ -85,17 +82,14 @@ your desktop calling shell commands).
 
 So yes, you're safe!
 
-## Support
-
-1. https://matrix.to/#/#waycrate-tools:matrix.org
-1. https://discord.gg/KKZRDYrRYW
-
 ## Contributors
 
-<a href="https://github.com/id3v1669/swhkd/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=id3v1669/swhkd" />
+<a href="https://github.com/id3v1669/swhkdp/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=id3v1669/swhkdp" />
 </a>
 
-## Supporters:
+## Thanks to original authors
 
-1. [@CluelessTechnologist](https://github.com/CluelessTechnologist)
+* Shinyzenith
+* Angelo Fallaria
+* EdenQwQ

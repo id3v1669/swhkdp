@@ -1,25 +1,21 @@
-# AUR:
-
-We have packaged `swhkd-git`. `swhkd-bin` has been packaged separately by a user of swhkd.
-
 ## NixOS
 
 For now flake users only.
 
-This repo contains a NixOS Module for swhkd service.
+This repo contains a NixOS Module for swhkdp service.
 To enable module add an input first and import to modules:
 ```nix
 {
   inputs = {
-    swhkd.url = "github:id3v1669/swhkd";
+    swhkdp.url = "github:id3v1669/swhkdp";
   }
 
-  outputs = {nixpkgs, swhkd, ...} @ inputs: {
+  outputs = {nixpkgs, swhkdp, ...} @ inputs: {
     nixosConfigurations.HOSTNAME = nixpkgs.lib.nixosSystem {
       specialArgs = { inherit inputs; };
       modules = [
         ./configuration.nix
-        swhkd.nixosModules.default
+        swhkdp.nixosModules.default
       ];
     };
   } 
@@ -31,27 +27,43 @@ After importing you should be able to use it in your configuration.nix file:
 , ...
 }:
 {
-  services.swhkd = {
+  services.swhkdp = {
     enable = true;
-    package = inputs.swhkd.packages.${system}.default.override { rfkillFeature = true; };
+    package = inputs.swhkdp.packages.${system}.default.override { rfkillFeature = true; };
     cooldown = 300;
-    settings = ''
-super + return
-  alacritty
-    '';
+    settings = {
+      modes = {
+        normal = {
+          swallow = false;
+          oneoff = false;
+          hotkeys = {
+            "KEY_LEFTMETA+KEY_LEFTSHIFT+KEY_K".action = "kitty";
+            "KEY_LEFTMETA+KEY_B" = {
+              action = "firefox";
+            };
+            "KEY_MUTE" = {
+              action_type = "singlecommand";
+              action = "pamixer -t";
+            };
+          };
+        };
+      };
+      remaps = {
+        "BTN_SIDE" = "KEY_LEFTMETA";
+      };
+    };
   };
 }
 ```
 * rfkill is feature related to [this](https://github.com/waycrate/swhkd/pull/254) pr/discussion
-* Do not forget to start/add to autostart swhkd of your system after login.
+* Do not forget to start/add to autostart swhkdp of your system after login.
 * Replace HOSTNAME with your oun
 
-ps. this module will be updated to support devices and maybe even config, but 
-it is already good enough to use
+ps. this module will be updated to support devices, but it is already good enough to use
 
 # Building:
 
-`swhkd` and `swhks` install to `/usr/local/bin/` by default. You can change this behaviour by editing the [Makefile](../Makefile) variable, `DESTDIR`, which acts as a prefix for all installed files. You can also specify it in the make command line, e.g. to install everything in `subdir`: `make DESTDIR="subdir" install`.
+`swhkdp` and `swhks` install to `/usr/local/bin/` by default. You can change this behaviour by editing the [Makefile](../Makefile) variable, `DESTDIR`, which acts as a prefix for all installed files. You can also specify it in the make command line, e.g. to install everything in `subdir`: `make DESTDIR="subdir" install`.
 
 # Dependencies:
 
@@ -71,7 +83,7 @@ it is already good enough to use
 
 # Compiling:
 
--   `git clone https://github.com/id3v1669/swhkd;cd swhkd`
+-   `git clone https://github.com/id3v1669/swhkdp;cd swhkdp`
 -   `make setup`
 -   `make clean`
 -   `make`
@@ -81,5 +93,5 @@ it is already good enough to use
 
 ```
 swhks &
-pkexec swhkd
+pkexec swhkdp
 ```

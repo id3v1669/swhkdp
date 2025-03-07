@@ -71,10 +71,10 @@ struct Args {
 async fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
     let default_cooldown: u64 = 250;
-    env::set_var("RUST_LOG", "swhkd=warn");
+    env::set_var("RUST_LOG", "swhkdp=warn");
 
     if args.debug {
-        env::set_var("RUST_LOG", "swhkd=trace");
+        env::set_var("RUST_LOG", "swhkdp=trace");
     }
 
     env_logger::init();
@@ -85,7 +85,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let invoking_uid = env.pkexec_id;
 
-    setup_swhkd(invoking_uid, env.runtime_dir.clone().to_string_lossy().to_string());
+    setup_swhkdp(invoking_uid, env.runtime_dir.clone().to_string_lossy().to_string());
 
     let load_config = || {
         // Drop privileges to the invoking user.
@@ -97,7 +97,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         log::debug!("Using config file path: {:#?}", config_file_path);
 
         // If no config is present
-        // Creates a default config at location (read man 5 swhkd)
+        // Creates a default config at location (read man 5 swhkdp)
 
         if !Path::new(&config_file_path).exists() {
             log::warn!("No config found at path: {:#?}", config_file_path);
@@ -337,6 +337,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         continue
                     }
                 };
+                log::debug!("Key: {:#?}", key);
 
                 match event.value() {
                     // Key press
@@ -442,17 +443,17 @@ pub fn check_input_group() -> Result<(), Box<dyn Error>> {
                 }
             }
         }
-        log::error!("Consider using `pkexec swhkd ...`");
+        log::error!("Consider using `pkexec swhkdp ...`");
         exit(1);
     } else {
-        log::warn!("Running swhkd as root!");
+        log::warn!("Running swhkdp as root!");
         Ok(())
     }
 }
 
 pub fn check_device_is_supported(device: &Device) -> bool {
     if device.supported_events().contains(evdev::EventType::KEY) {
-        if device.name() == Some("swhkd virtual output") {
+        if device.name() == Some("swhkdp virtual output") {
             return false;
         }
         log::debug!("Device: {}", device.name().unwrap(),);
@@ -463,7 +464,7 @@ pub fn check_device_is_supported(device: &Device) -> bool {
     }
 }
 
-pub fn setup_swhkd(invoking_uid: u32, runtime_path: String) {
+pub fn setup_swhkdp(invoking_uid: u32, runtime_path: String) {
     // Set a sane process umask.
     log::trace!("Setting process umask.");
     umask(Mode::S_IWGRP | Mode::S_IWOTH);
@@ -483,27 +484,28 @@ pub fn setup_swhkd(invoking_uid: u32, runtime_path: String) {
     }
 
     // Get the PID file path for instance tracking.
-    let pidfile: String = format!("{}swhkd_{}.pid", runtime_path, invoking_uid);
+    let pidfile: String = format!("{}swhkdp_{}.pid", runtime_path, invoking_uid);
     if Path::new(&pidfile).exists() {
         log::trace!("Reading {} file and checking for running instances.", pidfile);
-        let swhkd_pid = match fs::read_to_string(&pidfile) {
-            Ok(swhkd_pid) => swhkd_pid,
+        let swhkdp_pid = match fs::read_to_string(&pidfile) {
+            Ok(swhkdp_pid) => swhkdp_pid,
             Err(e) => {
                 log::error!("Unable to read {} to check all running instances", e);
                 exit(1);
             }
         };
-        log::debug!("Previous PID: {}", swhkd_pid);
+        log::debug!("Previous PID: {}", swhkdp_pid);
 
-        // Check if swhkd is already running!
+        // Check if swhkdp is already running!
         let mut sys = System::new_all();
         sys.refresh_all();
         for (pid, process) in sys.processes() {
-            if pid.to_string() == swhkd_pid && process.exe() == env::current_exe().unwrap().parent()
+            if pid.to_string() == swhkdp_pid
+                && process.exe() == env::current_exe().unwrap().parent()
             {
-                log::error!("Swhkd is already running!");
-                log::error!("pid of existing swhkd process: {}", pid.to_string());
-                log::error!("To close the existing swhkd process, run `sudo killall swhkd`");
+                log::error!("swhkdp is already running!");
+                log::error!("pid of existing swhkdp process: {}", pid.to_string());
+                log::error!("To close the existing swhkdp process, run `sudo killall swhkdp`");
                 exit(1);
             }
         }
@@ -525,12 +527,12 @@ pub fn setup_swhkd(invoking_uid: u32, runtime_path: String) {
 }
 
 pub fn create_default_config(invoking_uid: u32, config_file_path: &PathBuf) {
-    // Initializes a default SWHKD config at specific config path
+    // Initializes a default swhkdp config at specific config path
 
     perms::raise_privileges();
     match fs::File::create(config_file_path) {
         Ok(mut file) => {
-            log::debug!("Created default SWHKD config at: {:#?}", config_file_path);
+            log::debug!("Created default swhkdp config at: {:#?}", config_file_path);
             _ = file.write_all(b"# Comments start with #, uncomment to use \n#start a terminal\n#super + return\n#\talacritty # replace with terminal of your choice");
         }
         Err(err) => {

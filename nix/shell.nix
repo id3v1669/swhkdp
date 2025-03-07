@@ -1,6 +1,6 @@
 {pkgs}:
 pkgs.mkShell {
-  name = "Swhkd-devel";
+  name = "swhkdp-devel";
   nativeBuildInputs = with pkgs; [
     # Compilers
     cargo

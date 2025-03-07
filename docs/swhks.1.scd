@@ -27,8 +27,8 @@ swhks - Server for swhkd, used to run user level commands over IPC.
 
 # AUTHORS
 
-Created by Shinyzenith <aakashsensharma@gmail.com>, EdenQwQ <lsahlm1eden@gmail.com>, and Angelo Fallaria <ba.fallaria@gmail.com>.
-Maintained by id3v1669 <id3v1669@gmail.com> as original repo looks unmaintained for now.
+Created by Shinyzenith, EdenQwQ, and Angelo Fallaria.
+Maintained by id3v1669 <id3v1669@gmail.com> as this project went different path from original repo.
 For more information about development, see <https://github.com/id3v1669/swhks>.
 
 # SEE ALSO

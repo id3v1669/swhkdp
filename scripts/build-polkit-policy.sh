@@ -4,10 +4,10 @@
 # Defaults
 ###############
 
-readonly DEFAULT_SWHKD_PATH="/usr/bin/swhkd"
-readonly DEFAULT_POLICY_PATH="com.github.swhkd.pkexec.policy"
+readonly DEFAULT_swhkdp_PATH="/usr/bin/swhkdp"
+readonly DEFAULT_POLICY_PATH="com.github.swhkdp.pkexec.policy"
 readonly DEFAULT_MESSAGE="Authentication is required to run Simple Wayland Hotkey Daemon"
-readonly DEFAULT_ACTION_ID="com.github.swhkd.pkexec"
+readonly DEFAULT_ACTION_ID="com.github.swhkdp.pkexec"
 
 ###############
 # Init
@@ -15,13 +15,13 @@ readonly DEFAULT_ACTION_ID="com.github.swhkd.pkexec"
 
 print_help() {
     printf "Usage: build-polkit-policy [OPTIONS]\n\n"
-    printf "Generates a polkit policy file for swhkd.\n\n"
+    printf "Generates a polkit policy file for swhkdp.\n\n"
     printf "Optional Arguments:\n"
     printf " --policy-path=<path> Path to save the policy file to.\n"
     printf "                      If set to '-', this tool will output to stdout instead.\n"
     printf "                      Defaults to '%s'.\n" "${DEFAULT_POLICY_PATH}"
-    printf " --swhkd-path=<path>  Path to the swhkd binary when installed.\n"
-    printf "                      Defaults to '%s'.\n" "${DEFAULT_SWHKD_PATH}"
+    printf " --swhkdp-path=<path>  Path to the swhkdp binary when installed.\n"
+    printf "                      Defaults to '%s'.\n" "${DEFAULT_swhkdp_PATH}"
     printf " --action-id=<id>     Polkit action id to use.\n"
     printf "                      Defaults to '%s'.\n" "${DEFAULT_ACTION_ID}"
     printf " --message=<text>     Custom authentication message.\n"
@@ -35,8 +35,8 @@ while [ -n "$1" ]; do
             POLICY_PATH=${1#*=}
             shift
             ;;
-        --swhkd-path=*)
-            SWHKD_PATH=${1#*=}
+        --swhkdp-path=*)
+            swhkdp_PATH=${1#*=}
             shift
             ;;
         --action-id=*)
@@ -70,7 +70,7 @@ cat << EOF
       <allow_inactive>no</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
-    <annotate key="org.freedesktop.policykit.exec.path">${SWHKD_PATH}</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">${swhkdp_PATH}</annotate>
   </action>
 </policyconfig>
 EOF
@@ -78,7 +78,7 @@ EOF
 
 # No local variables in POSIX sh, so just set these globally
 POLICY_PATH="${POLICY_PATH:-${DEFAULT_POLICY_PATH}}"
-SWHKD_PATH="${SWHKD_PATH:-${DEFAULT_SWHKD_PATH}}"
+swhkdp_PATH="${swhkdp_PATH:-${DEFAULT_swhkdp_PATH}}"
 ACTION_ID="${ACTION_ID:-${DEFAULT_ACTION_ID}}"
 MESSAGE="${MESSAGE:-${DEFAULT_MESSAGE}}"
 

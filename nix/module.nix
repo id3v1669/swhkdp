@@ -5,7 +5,7 @@ self:
 , ...
 }:
 let
-  cfg = config.services.swhkd;
+  cfg = config.services.swhkdp;
   format = pkgs.formats.yaml { };
   inherit (pkgs.stdenv.hostPlatform) system;
 
@@ -14,23 +14,23 @@ let
   inherit (lib.options) mkOption mkEnableOption;
 in
 {
-  options.services.swhkd = {
+  options.services.swhkdp = {
     enable = mkEnableOption "Simple Wayland HotKey Daemon";
 
     package = mkOption {
-      description = "The package to use for `swhkd`";
+      description = "The package to use for `swhkdp`";
       default = self.packages.${system}.default;
       type = types.package;
     };
     
     cooldown = mkOption {
-      description = "The cooldown to use for `swhkd`";
+      description = "The cooldown to use for `swhkdp`";
       default = 250;
       type = types.int;
     };
 
     settings = mkOption {
-      description = "The config to use for `swhkd` syntax and samples could found in [repo](https://github.com/id3v1669/swhkd).";
+      description = "The config to use for `swhkdp` syntax and samples could found in [repo](https://github.com/id3v1669/swhkdp).";
       type = format.type;
       default = {
         modes = {
@@ -49,14 +49,14 @@ in
   config = mkIf cfg.enable {
     environment.systemPackages = [ cfg.package ];
 
-    systemd.user.services.swhkd = {
+    systemd.user.services.swhkdp = {
       description = "Simple Wayland HotKey Daemon";
       bindsTo = [ "default.target" ];
       script = let 
-        swhkdrc = pkgs.writeText "swhkd.yml" "${lib.generators.toYAML { } cfg.settings}";
-        swhkdrcCmd = if cfg.settings != null then "--config ${swhkdrc}" else "";
+        swhkdpyml = pkgs.writeText "swhkdp.yml" "${lib.generators.toYAML { } cfg.settings}";
+        swhkdpymlCmd = if cfg.settings != null then "--config ${swhkdpyml}" else "";
       in ''
-        /run/wrappers/bin/pkexec ${cfg.package}/bin/swhkd ${swhkdrcCmd} \
+        /run/wrappers/bin/pkexec ${cfg.package}/bin/swhkdp ${swhkdpymlCmd} \
           --cooldown ${toString cfg.cooldown}
       '';
       serviceConfig.Restart = "always";
@@ -66,7 +66,7 @@ in
       enable = true;
       extraConfig = ''
         polkit.addRule(function(action, subject) {
-            if (action.id == "com.github.swhkd.pkexec"  &&
+            if (action.id == "com.github.swhkdp.pkexec"  &&
                 subject.local == true &&
                 subject.active == true &&) {
                     return polkit.Result.YES;

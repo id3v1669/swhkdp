@@ -1,6 +1,6 @@
 ## systemd Instructions
 
-To have systemd automatically start `swhkd` for you:
+To have systemd automatically start `swhkdp` for you:
 
 1. Copy `hotkeys.sh` into your preferred directory
 2. `chmod +x hotkeys.sh`

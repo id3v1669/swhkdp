@@ -1,18 +1,16 @@
-# Maintainer: Aakash Sharma <aakashsensharma@gmail.com>
-# Contributor: Sergey A. <murlakatamenka@disroot.org>
-# Contributor: rv178 <idliyout@gmail.com>
+# Maintainer: id3v1669 <id3v1669@gmail.com>
 
-_pkgname="swhkd"
+_pkgname="swhkdp"
 pkgname="${_pkgname}-git"
 pkgver=1.2.1.r17.g022466e
 pkgrel=1
 arch=("x86_64")
-url="https://github.com/id3v1669/swhkd"
+url="https://github.com/id3v1669/swhkdp"
 pkgdesc="A display server independent hotkey daemon inspired by sxhkd."
 license=("BSD")
 depends=("polkit")
 makedepends=("rustup" "make" "git" "scdoc")
-conflicts=("swhkd-musl-git")
+conflicts=("swhkdp-musl-git")
 source=("${_pkgname}::git+${url}.git"
         "${_pkgname}-vim::git+${url}-vim.git")
 sha256sums=("SKIP"

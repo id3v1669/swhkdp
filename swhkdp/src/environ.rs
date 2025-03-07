@@ -52,15 +52,15 @@ impl Env {
     }
 
     pub fn fetch_config_path(&self) -> PathBuf {
-        PathBuf::from(&self.config_folder_location).join("swhkd/swhkdrc")
+        PathBuf::from(&self.config_folder_location).join("swhkdp/swhkdp.yml")
     }
 
     pub fn fetch_runtime_socket_path(&self) -> PathBuf {
-        PathBuf::from(&self.runtime_dir).join("swhkd.sock")
+        PathBuf::from(&self.runtime_dir).join("swhkdp.sock")
     }
 
     pub fn pkexec_err() -> ! {
-        log::error!("Failed to launch swhkd!!!");
+        log::error!("Failed to launch swhkdp!!!");
         log::error!("Make sure to launch the binary with pkexec.");
         std::process::exit(1);
     }

@@ -2,4 +2,4 @@
 
 killall swhks
 
-swhks & pkexec swhkd
+swhks & pkexec swhkdp

@@ -1,11 +1,11 @@
 # Destination dir, defaults to root. Should be overridden for packaging
 # e.g. make DESTDIR="packaging_subdir" install
 DESTDIR ?= "/"
-DAEMON_BINARY := swhkd
+DAEMON_BINARY := swhkdp
 SERVER_BINARY := swhks
 BUILDFLAGS := --release
 POLKIT_DIR := /usr/share/polkit-1/actions
-POLKIT_POLICY_FILE := com.github.swhkd.pkexec.policy
+POLKIT_POLICY_FILE := com.github.swhkdp.pkexec.policy
 TARGET_DIR := /usr/bin
 MAN1_DIR := /usr/share/man/man1
 MAN5_DIR := /usr/share/man/man5
@@ -17,7 +17,7 @@ build:
 	@cargo build $(BUILDFLAGS)
 	@./scripts/build-polkit-policy.sh \
 		--policy-path=$(POLKIT_POLICY_FILE) \
-		--swhkd-path=$(TARGET_DIR)/$(DAEMON_BINARY)
+		--swhkdp-path=$(TARGET_DIR)/$(DAEMON_BINARY)
 
 install:
 	@find ./docs -type f -iname "*.1.gz" \
@@ -29,7 +29,7 @@ install:
 	@install -Dm 644 -o root ./$(POLKIT_POLICY_FILE) -t $(DESTDIR)/$(POLKIT_DIR)
 
 uninstall:
-	@$(RM) -f /usr/share/man/**/swhkd.*
+	@$(RM) -f /usr/share/man/**/swhkdp.*
 	@$(RM) -f /usr/share/man/**/swhks.*
 	@$(RM) $(TARGET_DIR)/$(SERVER_BINARY)
 	@$(RM) $(TARGET_DIR)/$(DAEMON_BINARY)
@@ -43,7 +43,7 @@ check:
 release:
 	@$(RM) -f Cargo.lock
 	@$(MAKE) -s
-	@zip -r "glibc-x86_64-$(VERSION).zip" ./target/release/swhkd ./target/release/swhks
+	@zip -r "glibc-x86_64-$(VERSION).zip" ./target/release/swhkdp ./target/release/swhks
 
 test:
 	@cargo test

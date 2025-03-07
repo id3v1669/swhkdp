@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: swhkd bugs
+about: swhkdp bugs
 title: ""
 labels: bug
 assignees: id3v1669
@@ -9,7 +9,7 @@ assignees: id3v1669
 **Version Information:**
 
 - Distribution Information ( run `uname -a` )
-- swhkd version ( `swhkd -V` )
+- swhkdp version ( `swhkdp -V` )
 
 **Describe the bug:**
 A clear and concise description of what the bug is.

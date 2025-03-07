@@ -16,7 +16,7 @@ pub fn create_uinput_device() -> Result<VirtualDevice, Box<dyn std::error::Error
         get_all_relative_axes().iter().copied().collect();
 
     let device = VirtualDevice::builder()?
-        .name("swhkd virtual output")
+        .name("swhkdp virtual output")
         .with_keys(&keys)?
         .with_relative_axes(&relative_axes)?
         .build()?;
@@ -44,7 +44,7 @@ pub fn create_uinput_switches_device() -> Result<VirtualDevice, Box<dyn std::err
         }
     }
     let device = VirtualDevice::builder()?
-        .name("swhkd switches virtual output")
+        .name("swhkdp switches virtual output")
         .with_switches(&switches)?
         .build()?;
     Ok(device)

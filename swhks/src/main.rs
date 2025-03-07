@@ -17,7 +17,7 @@ use sysinfo::System;
 
 mod environ;
 
-/// IPC Server for swhkd
+/// IPC Server for swhkdp
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 struct Args {
@@ -131,7 +131,7 @@ fn main() -> std::io::Result<()> {
 
 fn get_file_paths(env: &Env) -> (String, String) {
     let pid_file_path = format!("{}/swhks.pid", env.runtime_dir.to_string_lossy());
-    let sock_file_path = format!("{}/swhkd.sock", env.runtime_dir.to_string_lossy());
+    let sock_file_path = format!("{}/swhkdp.sock", env.runtime_dir.to_string_lossy());
 
     (pid_file_path, sock_file_path)
 }

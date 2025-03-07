@@ -10,12 +10,12 @@ swhkd - Hotkey daemon inspired by sxhkd written in Rust
 
 # CONFIG FILE
 
-The config file goes in */etc/swhkd/swhkdrc*.
+The config file goes in */etc/swhkd/swhkdp.yml*.
 
 This can be avoided as such:
 	- Using the *include* statement in your config file.
 	- Using the *-c* flag to mention a custom config file at runtime.
-	- Symlinking the config file from *~/.config/swhkd/swhkdrc* or any other directory of choice to */etc/swhkd/swhkdrc*.
+	- Symlinking the config file from *~/.config/swhkd/swhkdp.yml* or any other directory of choice to */etc/swhkd/swhkdp.yml*.
 
 More about the config file syntax in `swhkd(5)`
 
@@ -51,12 +51,11 @@ More about the config file syntax in `swhkd(5)`
 
 # AUTHORS
 
-Created by Shinyzenith <aakashsensharma@gmail.com>, EdenQwQ <lsahlm1eden@gmail.com>, and Angelo Fallaria <ba.fallaria@gmail.com>.
-Maintained by id3v1669 <id3v1669@gmail.com> as original repo looks unmaintained for now.
+Created by Shinyzenith, EdenQwQ, and Angelo Fallaria.
+Maintained by id3v1669 <id3v1669@gmail.com> as this project went different path from original repo.
 For more information about development, see <https://github.com/id3v1669/swhkd>.
 
 # SEE ALSO
 
-	- *swhkd(5)*
-	- *swhkd-keys(5)*
+	- *swhkdp(5)*
 	- *swhks(1)*
