@@ -117,7 +117,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     };
 
-    let mut modes = load_config();
+    let mut config = load_config();
+    let mut modes = config.modes;
+    let mut remaps = config.remaps;
     let mut mode_stack: Vec<usize> = vec![0];
     let arg_add_devices = args.devices;
     let arg_ignore_devices = args.ignoredevices;
@@ -233,7 +235,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     }
 
                     SIGHUP => {
-                        modes = load_config();
+                        config = load_config();
+                        modes = config.modes;
+                        remaps = config.remaps;
                         mode_stack = vec![0];
                     }
 
@@ -303,11 +307,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 }
             }
 
-            Some((node, Ok(event))) = device_stream_map.next() => {
+            Some((node, Ok(mut event))) = device_stream_map.next() => {
                 let device_state = &mut device_states.get_mut(&node).expect("device not in states map");
                 let key = match event.destructure() {
                     EventSummary::Key(_, keycode, _) => {
-                        keycode
+                        match remaps.get(&keycode) {
+                            Some(remapped_keycode) => {
+                                event = evdev::InputEvent::new(event.event_type().0, remapped_keycode.0, event.value());
+                                *remapped_keycode
+                            },
+                            _ => keycode
+                        }
                     },
                     EventSummary::Switch(..) => {
                         uinput_switches_device.emit(&[event]).unwrap();
@@ -538,7 +548,7 @@ pub fn send_command(
     mode_stack: &mut Vec<usize>,
 ) {
     log::info!("Hotkey pressed: {:#?}", hotkey);
-    let command = hotkey.command;
+    let command = hotkey.action;
     let mut commands_to_send = String::new();
     if modes[mode_stack[mode_stack.len() - 1]].options.oneoff {
         mode_stack.pop();
@@ -565,7 +575,7 @@ pub fn send_command(
             }
         }
     } else {
-        commands_to_send = command;
+        commands_to_send = command.to_string();
     }
     if commands_to_send.ends_with(" &&") {
         commands_to_send = commands_to_send.strip_suffix(" &&").unwrap().to_string();

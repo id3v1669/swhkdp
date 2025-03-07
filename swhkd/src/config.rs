@@ -6,12 +6,13 @@ use std::str::FromStr;
 use std::{fmt, path::Path};
 
 #[derive(Debug, Deserialize)]
-pub struct ConfigNew {
-    pub modes: HashMap<String, ConfigMode>,
+pub struct ConfigRead {
+    pub modes: HashMap<String, ConfigReadMode>,
+    pub remaps: Option<HashMap<String, String>>,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct ConfigMode {
+pub struct ConfigReadMode {
     pub hotkeys: HashMap<String, CommandConfig>,
     pub swallow: Option<bool>,
     pub oneoff: Option<bool>,
@@ -19,10 +20,15 @@ pub struct ConfigMode {
 
 #[derive(Debug, Deserialize)]
 pub struct CommandConfig {
-    pub action_type: Option<String>, // tobe enum command, macros, key replacement
-    pub action: String,              // tobe Action,
+    pub action_type: Option<String>,
+    pub action: String,
     pub send: Option<bool>,
     pub on_release: Option<bool>,
+}
+
+pub struct Config {
+    pub modes: Vec<Mode>,
+    pub remaps: HashMap<KeyCode, KeyCode>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -35,9 +41,27 @@ pub struct Mode {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Hotkey {
+    pub action_type: ActionType,
     pub keybind: KeyBinding,
-    pub command: String,
+    pub action: String,
 }
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+pub enum ActionType {
+    Command,
+    SingleCommand,
+}
+
+impl ActionType {
+    pub fn from_str(s: &str) -> Result<Self, ()> {
+        match s {
+            "Command" | "command" => Ok(ActionType::Command),
+            "SingleCommand" | "Singlecommand" | "singlecommand" => Ok(ActionType::SingleCommand),
+            _ => Err(()),
+        }
+    }
+}
+
 impl Value for &Hotkey {
     fn keysym(&self) -> evdev::KeyCode {
         self.keybind.keysym
@@ -89,10 +113,11 @@ pub struct ModeOptions {
     pub oneoff: bool,
 }
 
-pub fn load(path: &Path) -> Result<Vec<Mode>, Error> {
+pub fn load(path: &Path) -> Result<Config, Error> {
     let config_content_raw = fs::read_to_string(path).unwrap();
-    let config_new: ConfigNew = serde_yml::from_str(&config_content_raw).unwrap();
+    let config_new: ConfigRead = serde_yml::from_str(&config_content_raw).unwrap();
     let mut modes_to_return: Vec<Mode> = Vec::new();
+    let mut remaps_to_return: HashMap<KeyCode, KeyCode> = HashMap::new();
     for mode in config_new.modes.iter() {
         let mut mode_from_config = Mode {
             name: mode.0.clone(),
@@ -109,9 +134,18 @@ pub fn load(path: &Path) -> Result<Vec<Mode>, Error> {
             let mut commands: Vec<String> = Vec::new();
             let keycodes: String = keycodes.chars().filter(|&c| c != ' ' && c != '\t').collect();
             let objects = keycodes.split('+').collect::<Vec<_>>();
-            let action_type = command.action_type.clone().unwrap_or("command".to_string());
-            if (objects.len() < 2 && action_type == "command")
-                || (objects.len() != 1 && action_type == "singlecommand")
+            let action_type = match ActionType::from_str(
+                command.action_type.clone().unwrap_or("command".to_string()).as_str(),
+            ) {
+                Ok(action_type) => action_type,
+                Err(_) => {
+                    log::warn!("Failed to parce action_type for keycodes line: {:?}", keycodes);
+                    continue;
+                }
+            };
+            if (objects.len() < 2 && action_type == ActionType::Command)
+                || (objects.len() != 1 && action_type == ActionType::SingleCommand)
+            //|| (objects.len() != 2 && action_type == ActionType::Remap)
             {
                 log::warn!(
                     "Invalid keycodes line, action_type \"command\" must contain >2 keycodes or choose action_type \"singlecommand\": {:?}",
@@ -193,13 +227,14 @@ pub fn load(path: &Path) -> Result<Vec<Mode>, Error> {
             }
             for i in 0..keys.len() {
                 mode_from_config.hotkeys.push(Hotkey {
+                    action_type: action_type.clone(),
                     keybind: KeyBinding {
                         keysym: keys[i],
                         modifiers: modifiers.clone(),
                         send: command.send.unwrap_or(false),
                         on_release: command.on_release.unwrap_or(false),
                     },
-                    command: commands[i]
+                    action: commands[i]
                         .clone()
                         .strip_suffix('\n')
                         .unwrap_or(&commands[i].clone())
@@ -214,7 +249,17 @@ pub fn load(path: &Path) -> Result<Vec<Mode>, Error> {
         log::debug!("after hotkeys");
         modes_to_return.push(mode_from_config);
     }
-    Ok(modes_to_return)
+    for (keycode_from, keycode_to) in config_new.remaps.unwrap_or_default() {
+        match (KeyCode::from_str(&keycode_from), KeyCode::from_str(&keycode_to)) {
+            (Ok(keycode_from), Ok(keycode_to)) => {
+                remaps_to_return.insert(keycode_from, keycode_to);
+            }
+            (Err(_), _) => log::warn!("Failed to parse keycode_from: {:?}", keycode_from),
+            (_, Err(_)) => log::warn!("Failed to parse keycode_to: {:?}", keycode_to),
+        }
+    }
+
+    Ok(Config { modes: modes_to_return, remaps: remaps_to_return })
 }
 
 #[derive(Debug)]
