@@ -1,6 +1,6 @@
 use evdev::KeyCode;
 use serde::Deserialize;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::str::FromStr;
 use std::{fmt, path::Path};
@@ -66,8 +66,8 @@ impl Value for &Hotkey {
     fn keysym(&self) -> evdev::KeyCode {
         self.keybind.keysym
     }
-    fn modifiers(&self) -> Vec<evdev::KeyCode> {
-        self.keybind.clone().modifiers
+    fn modifiers(&self) -> &HashSet<evdev::KeyCode> {
+        &self.keybind.modifiers
     }
     fn is_send(&self) -> bool {
         self.keybind.send
@@ -81,8 +81,8 @@ impl Value for KeyBinding {
     fn keysym(&self) -> evdev::KeyCode {
         self.keysym
     }
-    fn modifiers(&self) -> Vec<evdev::KeyCode> {
-        self.clone().modifiers
+    fn modifiers(&self) -> &HashSet<evdev::KeyCode> {
+        &self.modifiers
     }
     fn is_send(&self) -> bool {
         self.send
@@ -94,7 +94,7 @@ impl Value for KeyBinding {
 
 pub trait Value {
     fn keysym(&self) -> evdev::KeyCode;
-    fn modifiers(&self) -> Vec<evdev::KeyCode>;
+    fn modifiers(&self) -> &HashSet<evdev::KeyCode>;
     fn is_send(&self) -> bool;
     fn is_on_release(&self) -> bool;
 }
@@ -102,7 +102,7 @@ pub trait Value {
 #[derive(Debug, Clone, PartialEq)]
 pub struct KeyBinding {
     pub keysym: evdev::KeyCode,
-    pub modifiers: Vec<evdev::KeyCode>,
+    pub modifiers: HashSet<evdev::KeyCode>,
     pub send: bool,
     pub on_release: bool,
 }
@@ -129,7 +129,7 @@ pub fn load(path: &Path) -> Result<Config, Error> {
             },
         };
         for (keycodes, command) in mode.1.hotkeys.iter() {
-            let mut modifiers: Vec<KeyCode> = Vec::new();
+            let mut modifiers: HashSet<KeyCode> = HashSet::new();
             let mut keys: Vec<KeyCode> = Vec::new();
             let mut commands: Vec<String> = Vec::new();
             let keycodes: String = keycodes.chars().filter(|&c| c != ' ' && c != '\t').collect();
@@ -145,7 +145,6 @@ pub fn load(path: &Path) -> Result<Config, Error> {
             };
             if (objects.len() < 2 && action_type == ActionType::Command)
                 || (objects.len() != 1 && action_type == ActionType::SingleCommand)
-            //|| (objects.len() != 2 && action_type == ActionType::Remap)
             {
                 log::warn!(
                     "Invalid keycodes line, action_type \"command\" must contain >2 keycodes or choose action_type \"singlecommand\": {:?}",
@@ -158,7 +157,7 @@ pub fn load(path: &Path) -> Result<Config, Error> {
                 .into_iter()
                 .take(objects.len() - 1)
                 .map(KeyCode::from_str)
-                .collect::<Result<Vec<_>, _>>()
+                .collect::<Result<HashSet<_>, _>>()
             {
                 Ok(tokens) => {
                     if tokens.iter().any(|token| !ALLOWED_MODIFIERS.contains(token)) {

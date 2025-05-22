@@ -1,12 +1,12 @@
-swhkd(5) "github.com/id3v1669/swhkd" "File Formats Manual"
+swhkdp(5) "github.com/id3v1669/swhkdp" "File Formats Manual"
 
 # NAME
 
-swhkd	- Hotkey daemon inspired by sxhkd written in Rust
+swhkdp	- Hotkey daemon inspired by sxhkd written in Rust
 
 # CONFIG FILE
 
-	- A global config can be defined in */etc/swhkd/swhkdp.yml.
+	- A global config can be defined in */etc/swhkdp/swhkdp.yml.
 	- A local config overrides the global one. Local configs should be placed in the root of the project.
 
 # SYNTAX
@@ -45,7 +45,7 @@ remaps:
 
 Created by Shinyzenith, EdenQwQ, and Angelo Fallaria.
 Maintained by id3v1669 <id3v1669@gmail.com> as this project went different path from original repo.
-For more information about development, see <https://github.com/id3v1669/swhkd>.
+For more information about development, see <https://github.com/id3v1669/swhkdp>.
 
 # SEE ALSO
 

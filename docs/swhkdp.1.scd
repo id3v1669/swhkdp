@@ -1,23 +1,23 @@
-swhkd(1) "github.com/id3v1669/swhkd" "General Commands Manual"
+swhkdp(1) "github.com/id3v1669/swhkdp" "General Commands Manual"
 
 # NAME
 
-swhkd - Hotkey daemon inspired by sxhkd written in Rust
+swhkdp - Hotkey daemon inspired by sxhkd written in Rust
 
 # SYNOPSIS
 
-*pkexec swhkd* [_flags_]
+*pkexec swhkdp* [_flags_]
 
 # CONFIG FILE
 
-The config file goes in */etc/swhkd/swhkdp.yml*.
+The config file goes in */etc/swhkdp/swhkdp.yml*.
 
 This can be avoided as such:
 	- Using the *include* statement in your config file.
 	- Using the *-c* flag to mention a custom config file at runtime.
-	- Symlinking the config file from *~/.config/swhkd/swhkdp.yml* or any other directory of choice to */etc/swhkd/swhkdp.yml*.
+	- Symlinking the config file from *~/.config/swhkdp/swhkdp.yml* or any other directory of choice to */etc/swhkdp/swhkdp.yml*.
 
-More about the config file syntax in `swhkd(5)`
+More about the config file syntax in `swhkdp(5)`
 
 # OPTIONS
 
@@ -45,15 +45,15 @@ More about the config file syntax in `swhkd(5)`
 
 # SIGNALS
 
-	- Reload config file: `sudo pkill -HUP swhkd`
-	- Pause Hotkey checking: `sudo pkill -USR1 swhkd`
-	- Resume key checking: `sudo pkill -USR2 swhkd`
+	- Reload config file: `sudo pkill -HUP swhkdp`
+	- Pause Hotkey checking: `sudo pkill -USR1 swhkdp`
+	- Resume key checking: `sudo pkill -USR2 swhkdp`
 
 # AUTHORS
 
 Created by Shinyzenith, EdenQwQ, and Angelo Fallaria.
 Maintained by id3v1669 <id3v1669@gmail.com> as this project went different path from original repo.
-For more information about development, see <https://github.com/id3v1669/swhkd>.
+For more information about development, see <https://github.com/id3v1669/swhkdp>.
 
 # SEE ALSO
 

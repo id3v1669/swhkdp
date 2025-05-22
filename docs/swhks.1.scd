@@ -1,8 +1,8 @@
-swhks(1) "github.com/id3v1669/swhkd" "General Commands Manual"
+swhks(1) "github.com/id3v1669/swhkdp" "General Commands Manual"
 
 # NAME
 
-swhks - Server for swhkd, used to run user level commands over IPC.
+swhks - Server for swhkdp, used to run user level commands over IPC.
 
 # SYNOPSIS
 
@@ -33,6 +33,5 @@ For more information about development, see <https://github.com/id3v1669/swhks>.
 
 # SEE ALSO
 
-	- *swhkd(1)*
-	- *swhkd(5)*
-	- *swhkd-keys(5)*
+	- *swhkdp(1)*
+	- *swhkdp(5)*
