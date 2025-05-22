@@ -621,47 +621,24 @@ pub fn get_all_relative_axes() -> &'static [RelativeAxisCode] {
 }
 
 pub fn get_all_switches() -> &'static [SwitchCode] {
-    #[cfg(feature = "rfkill")]
-    {
-        &[
-            SwitchCode::SW_LID,
-            SwitchCode::SW_TABLET_MODE,
-            SwitchCode::SW_HEADPHONE_INSERT,
-            SwitchCode::SW_RFKILL_ALL,
-            SwitchCode::SW_MICROPHONE_INSERT,
-            SwitchCode::SW_DOCK,
-            SwitchCode::SW_LINEOUT_INSERT,
-            SwitchCode::SW_JACK_PHYSICAL_INSERT,
-            SwitchCode::SW_VIDEOOUT_INSERT,
-            SwitchCode::SW_CAMERA_LENS_COVER,
-            SwitchCode::SW_KEYPAD_SLIDE,
-            SwitchCode::SW_FRONT_PROXIMITY,
-            SwitchCode::SW_ROTATE_LOCK,
-            SwitchCode::SW_LINEIN_INSERT,
-            SwitchCode::SW_MUTE_DEVICE,
-            SwitchCode::SW_PEN_INSERTED,
-            SwitchCode::SW_MACHINE_COVER,
-        ]
-    }
-    #[cfg(not(feature = "rfkill"))]
-    {
-        &[
-            SwitchCode::SW_LID,
-            SwitchCode::SW_TABLET_MODE,
-            SwitchCode::SW_HEADPHONE_INSERT,
-            SwitchCode::SW_MICROPHONE_INSERT,
-            SwitchCode::SW_DOCK,
-            SwitchCode::SW_LINEOUT_INSERT,
-            SwitchCode::SW_JACK_PHYSICAL_INSERT,
-            SwitchCode::SW_VIDEOOUT_INSERT,
-            SwitchCode::SW_CAMERA_LENS_COVER,
-            SwitchCode::SW_KEYPAD_SLIDE,
-            SwitchCode::SW_FRONT_PROXIMITY,
-            SwitchCode::SW_ROTATE_LOCK,
-            SwitchCode::SW_LINEIN_INSERT,
-            SwitchCode::SW_MUTE_DEVICE,
-            SwitchCode::SW_PEN_INSERTED,
-            SwitchCode::SW_MACHINE_COVER,
-        ]
-    }
+    &[
+        SwitchCode::SW_LID,
+        SwitchCode::SW_TABLET_MODE,
+        SwitchCode::SW_HEADPHONE_INSERT,
+        #[cfg(feature = "rfkill")]
+        SwitchCode::SW_RFKILL_ALL,
+        SwitchCode::SW_MICROPHONE_INSERT,
+        SwitchCode::SW_DOCK,
+        SwitchCode::SW_LINEOUT_INSERT,
+        SwitchCode::SW_JACK_PHYSICAL_INSERT,
+        SwitchCode::SW_VIDEOOUT_INSERT,
+        SwitchCode::SW_CAMERA_LENS_COVER,
+        SwitchCode::SW_KEYPAD_SLIDE,
+        SwitchCode::SW_FRONT_PROXIMITY,
+        SwitchCode::SW_ROTATE_LOCK,
+        SwitchCode::SW_LINEIN_INSERT,
+        SwitchCode::SW_MUTE_DEVICE,
+        SwitchCode::SW_PEN_INSERTED,
+        SwitchCode::SW_MACHINE_COVER,
+    ]
 }

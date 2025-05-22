@@ -2,7 +2,7 @@
 description = "Sxhkd clone for Wayland (works on TYY and X11 too)"
 edition = "2021"
 name = "Simple-Wayland-HotKey-Daemon-Polkit"
-version = "1.3.0-git"
+version = "1.3.1-git"
 authors = [
 	"id3v1669 <id3v1669@gmail.com>\n",
 ]
@@ -11,7 +11,7 @@ authors = [
 rfkill = []
 
 [build-dependencies]
-flate2 = "1.1.0"
+flate2 = "1.1.1"
 
 [dependencies]
 clap.workspace = true
@@ -20,14 +20,14 @@ log.workspace = true
 nix.workspace = true
 sysinfo.workspace = true
 
-evdev = { version = "0.13.0", features = ["tokio", "stream-trait"] }
+evdev = { version = "0.13.1", features = ["tokio", "stream-trait"] }
 itertools = "0.14.0"
 regex = "1.11.1"
-serde = { version = "1.0.218", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
 serde_yml = "0.0.12"
-signal-hook = "0.3.17"
+signal-hook = "0.3.18"
 signal-hook-tokio = { version = "0.3.1", features = ["futures-v0_3"] }
-tokio = { version = "1.43.0", features = ["full"] }
+tokio = { version = "1.45.0", features = ["full"] }
 tokio-stream = "0.1.17"
 tokio-udev = "0.9.1"
 
