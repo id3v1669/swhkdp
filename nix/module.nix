@@ -27,6 +27,18 @@ in {
       type = types.int;
     };
 
+    devices = mkOption {
+      description = "The list of devices to use for `swhkdp`";
+      default = [];
+      type = types.listOf types.str;
+    };
+
+    ignore = mkOption {
+      description = "The list of devices to ignore for `swhkdp`";
+      default = [];
+      type = types.listOf types.str;
+    };
+
     settings = mkOption {
       description = "The config to use for `swhkdp` syntax and samples could found in [repo](https://github.com/id3v1669/swhkdp).";
       type = format.type;
@@ -56,9 +68,14 @@ in {
           if cfg.settings != null
           then "--config ${swhkdpyml}"
           else "";
+        devicesCmd =
+          if cfg.devices != []
+          then "-D \"${lib.concatStringsSep "|" cfg.devices}\""
+          else "";
       in ''
-        /run/wrappers/bin/pkexec ${cfg.package}/bin/swhkdp ${swhkdpymlCmd} \
-          --cooldown ${toString cfg.cooldown}
+        /run/wrappers/bin/pkexec ${cfg.package}/bin/swhkdp ${swhkdpymlCmd} ${devicesCmd}\
+          --cooldown ${toString cfg.cooldown} \
+          -I "${lib.concatStringsSep "|" cfg.ignore}"
       '';
       serviceConfig.Restart = "always";
       wantedBy = ["default.target"];

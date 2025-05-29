@@ -31,6 +31,13 @@ After importing you should be able to use it in your configuration.nix file:
     enable = true;
     package = inputs.swhkdp.packages.${system}.default.override { rfkillFeature = true; };
     cooldown = 300;
+    # To get device names use command `libinput list-devices | grep -i Device:`
+    devices = [ #if device list is not present or empty, automaticly scans among all availible devices
+      "device1"
+    ];
+    ignore = [ # ignoring devices is prioritized over device list
+      "device2"
+    ];
     settings = {
       modes = {
         normal = {

@@ -59,11 +59,11 @@ struct Args {
     debug: bool,
 
     /// Take a list of devices from the user
-    #[arg(short = 'D', long, num_args = 0.., value_delimiter = ' ')]
+    #[arg(short = 'D', long, num_args = 0.., value_delimiter = '|')]
     devices: Vec<String>,
 
     /// Take a list of devices to ignore from the user
-    #[arg(short = 'I', long, num_args = 0.., value_delimiter = ' ')]
+    #[arg(short = 'I', long, num_args = 0.., value_delimiter = '|')]
     ignoredevices: Vec<String>,
 }
 
@@ -129,7 +129,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let to_ignore =
         |dev: &Device| arg_ignore_devices.contains(&dev.name().unwrap_or("[unknown]").to_string());
 
-    let supported_devices: Vec<_> = {
+    let supported_devices: Vec<(PathBuf, Device)> = {
         if arg_add_devices.is_empty() {
             log::trace!("Attempting to find all supported devices file descriptors.");
             evdev::enumerate()

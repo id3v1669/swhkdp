@@ -7,3 +7,4 @@ com.github.swhkdp.pkexec.policy
 *rc
 !*rc/
 .direnv
+test.log
