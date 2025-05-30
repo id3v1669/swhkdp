@@ -452,7 +452,9 @@ pub fn check_input_group() -> Result<(), Box<dyn Error>> {
 }
 
 pub fn check_device_is_supported(device: &Device) -> bool {
-    if device.supported_events().contains(evdev::EventType::KEY) {
+    if device.supported_events().contains(evdev::EventType::KEY)
+        && !device.supported_keys().is_some_and(|keys| keys.contains(KeyCode::BTN_TOUCH))
+    {
         if device.name() == Some("swhkdp virtual output") {
             return false;
         }
