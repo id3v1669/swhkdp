@@ -506,7 +506,7 @@ pub fn setup_swhkdp(invoking_uid: u32, runtime_path: String) {
                 && process.exe() == env::current_exe().unwrap().parent()
             {
                 log::error!("swhkdp is already running!");
-                log::error!("pid of existing swhkdp process: {}", pid.to_string());
+                log::error!("pid of existing swhkdp process: {}", pid);
                 log::error!("To close the existing swhkdp process, run `sudo killall swhkdp`");
                 exit(1);
             }
