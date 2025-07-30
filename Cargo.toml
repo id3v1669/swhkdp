@@ -6,11 +6,11 @@ members = [
 resolver = "2"
 
 [workspace.dependencies]
-clap = { version = "4.5.40", features = ["derive"] }
+clap = { version = "4.5.42", features = ["derive"] }
 env_logger = "0.11.8"
 log = "0.4.27"
 nix = { version = "0.30", features = ["signal", "user", "fs", "ioctl"] }
-sysinfo = "0.35.2"
+sysinfo = "0.36.1"
 
 [profile.release]
 lto = true          # Enable Link Time Optimization
