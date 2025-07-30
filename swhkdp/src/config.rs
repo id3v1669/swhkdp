@@ -139,7 +139,7 @@ pub fn load(path: &Path) -> Result<Config, Error> {
             ) {
                 Ok(action_type) => action_type,
                 Err(_) => {
-                    log::warn!("Failed to parce action_type for keycodes line: {:?}", keycodes);
+                    log::warn!("Failed to parce action_type for keycodes line: {keycodes:?}");
                     continue;
                 }
             };
@@ -147,8 +147,7 @@ pub fn load(path: &Path) -> Result<Config, Error> {
                 || (objects.len() != 1 && action_type == ActionType::SingleCommand)
             {
                 log::warn!(
-                    "Invalid keycodes line, action_type \"command\" must contain >2 keycodes or choose action_type \"singlecommand\": {:?}",
-                    keycodes
+                    "Invalid keycodes line, action_type \"command\" must contain >2 keycodes or choose action_type \"singlecommand\": {keycodes:?}"
                 );
                 continue;
             }
@@ -161,12 +160,12 @@ pub fn load(path: &Path) -> Result<Config, Error> {
             {
                 Ok(tokens) => {
                     if tokens.iter().any(|token| !ALLOWED_MODIFIERS.contains(token)) {
-                        log::warn!("Invalid modifier for keycodes line: {:?}", keycodes);
+                        log::warn!("Invalid modifier for keycodes line: {keycodes:?}");
                         continue;
                     }
                     modifiers = tokens;
                 }
-                Err(_) => log::warn!("Failed parsing modifiers for keycodes line: {:?}", keycodes),
+                Err(_) => log::warn!("Failed parsing modifiers for keycodes line: {keycodes:?}"),
             }
             let keys_string = objects.last().unwrap();
             if keys_string.starts_with('{') && keys_string.ends_with('}') {
@@ -176,13 +175,13 @@ pub fn load(path: &Path) -> Result<Config, Error> {
                     if !key_string.contains('-') {
                         match KeyCode::from_str(key_string) {
                             Ok(key) => keys.push(key),
-                            Err(_) => log::warn!("Failed to parse key: {:?}", key_string),
+                            Err(_) => log::warn!("Failed to parse key: {key_string:?}"),
                         }
                         continue;
                     }
                     let range: Vec<&str> = key_string.split('-').collect();
                     if range.len() != 2 {
-                        log::warn!("Invalid range for keys: {:?}", key_string);
+                        log::warn!("Invalid range for keys: {key_string:?}");
                         continue;
                     }
                     let rfrom = match KeyCode::from_str(range[0]) {
@@ -220,7 +219,7 @@ pub fn load(path: &Path) -> Result<Config, Error> {
             } else {
                 match KeyCode::from_str(keys_string) {
                     Ok(key) => keys.push(key),
-                    Err(_) => log::warn!("Failed to parse key: {:?}", keys_string),
+                    Err(_) => log::warn!("Failed to parse key: {keys_string:?}"),
                 }
                 commands.push(command.action.clone());
             }
@@ -243,7 +242,7 @@ pub fn load(path: &Path) -> Result<Config, Error> {
         }
         log::debug!("before hotkeys");
         for hotkey in mode_from_config.hotkeys.iter() {
-            log::debug!("Hotkey: {:?}", hotkey);
+            log::debug!("Hotkey: {hotkey:?}");
         }
         log::debug!("after hotkeys");
         modes_to_return.push(mode_from_config);
@@ -253,8 +252,8 @@ pub fn load(path: &Path) -> Result<Config, Error> {
             (Ok(keycode_from), Ok(keycode_to)) => {
                 remaps_to_return.insert(keycode_from, keycode_to);
             }
-            (Err(_), _) => log::warn!("Failed to parse keycode_from: {:?}", keycode_from),
-            (_, Err(_)) => log::warn!("Failed to parse keycode_to: {:?}", keycode_to),
+            (Err(_), _) => log::warn!("Failed to parse keycode_from: {keycode_from:?}"),
+            (_, Err(_)) => log::warn!("Failed to parse keycode_to: {keycode_to:?}"),
         }
     }
 
@@ -282,7 +281,7 @@ impl fmt::Display for Error {
         match self {
             Error::ConfigNotFound => "Config file not found.".fmt(f),
 
-            Error::Io(io_err) => format!("I/O Error while parsing config file: {}", io_err).fmt(f),
+            Error::Io(io_err) => format!("I/O Error while parsing config file: {io_err}").fmt(f),
         }
     }
 }

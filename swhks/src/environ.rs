@@ -36,11 +36,11 @@ impl Env {
                     std::process::exit(1);
                 }
                 EnvError::GenericError(err) => {
-                    log::error!("Generic error: {:#?}", err);
+                    log::error!("Generic error: {err:#?}");
                     std::process::exit(1);
                 }
                 _ => {
-                    log::error!("Unexpected error: {:#?}", e);
+                    log::error!("Unexpected error: {e:#?}");
                     std::process::exit(1);
                 }
             },
@@ -56,11 +56,11 @@ impl Env {
                     home.join(".local/share")
                 }
                 EnvError::GenericError(err) => {
-                    log::error!("Generic error: {:#?}", err);
+                    log::error!("Generic error: {err:#?}");
                     std::process::exit(1);
                 }
                 _ => {
-                    log::error!("Unexpected error: {:#?}", e);
+                    log::error!("Unexpected error: {e:#?}");
                     std::process::exit(1);
                 }
             },
@@ -82,10 +82,10 @@ impl Env {
                 VarError::NotPresent => match name {
                     "XDG_DATA_HOME" => Err(EnvError::DataHomeNotSet),
                     "HOME" => Err(EnvError::HomeNotSet),
-                    _ => Err(EnvError::GenericError(format!("{} not set", name))),
+                    _ => Err(EnvError::GenericError(format!("{name} not set"))),
                 },
                 VarError::NotUnicode(_) => {
-                    Err(EnvError::GenericError(format!("{} not unicode", name)))
+                    Err(EnvError::GenericError(format!("{name} not unicode")))
                 }
             },
         }

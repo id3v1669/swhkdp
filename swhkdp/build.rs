@@ -1,10 +1,10 @@
 extern crate flate2;
-use flate2::{write::GzEncoder, Compression};
+use flate2::{Compression, write::GzEncoder};
 use std::{
-    fs::{read_dir, File, OpenOptions},
-    io::{copy, BufReader, ErrorKind},
+    fs::{File, OpenOptions, read_dir},
+    io::{BufReader, ErrorKind, copy},
     path::Path,
-    process::{exit, Command, Stdio},
+    process::{Command, Stdio, exit},
 };
 
 fn main() {

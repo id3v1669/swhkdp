@@ -1,7 +1,7 @@
 use clap::Parser;
 use environ::Env;
 use nix::{
-    sys::stat::{umask, Mode},
+    sys::stat::{Mode, umask},
     unistd::daemon,
 };
 use std::io::Read;
@@ -11,7 +11,7 @@ use std::{
     fs::OpenOptions,
     os::unix::net::UnixListener,
     path::{Path, PathBuf},
-    process::{exit, id, Command, Stdio},
+    process::{Command, Stdio, exit, id},
 };
 use sysinfo::System;
 
@@ -66,21 +66,21 @@ fn main() -> std::io::Result<()> {
     if let Some(p) = log_path.parent() {
         if !p.exists() {
             if let Err(e) = fs::create_dir_all(p) {
-                log::error!("Failed to create log dir: {}", e);
+                log::error!("Failed to create log dir: {e}");
             }
         }
     }
 
     if Path::new(&pid_file_path).exists() {
-        log::trace!("Reading {} file and checking for running instances.", pid_file_path);
+        log::trace!("Reading {pid_file_path} file and checking for running instances.");
         let swhks_pid = match fs::read_to_string(&pid_file_path) {
             Ok(swhks_pid) => swhks_pid,
             Err(e) => {
-                log::error!("Unable to read {} to check all running instances", e);
+                log::error!("Unable to read {e} to check all running instances");
                 exit(1);
             }
         };
-        log::debug!("Previous PID: {}", swhks_pid);
+        log::debug!("Previous PID: {swhks_pid}");
 
         let mut sys = System::new_all();
         sys.refresh_all();
@@ -100,8 +100,8 @@ fn main() -> std::io::Result<()> {
                 log::debug!("Removed old socket file");
             }
             Err(e) => {
-                log::error!("Error removing the socket file!: {}", e);
-                log::error!("You can manually remove the socket file: {}", sock_file_path);
+                log::error!("Error removing the socket file!: {e}");
+                log::error!("You can manually remove the socket file: {sock_file_path}");
                 exit(1);
             }
         };
@@ -110,7 +110,7 @@ fn main() -> std::io::Result<()> {
     match fs::write(&pid_file_path, id().to_string()) {
         Ok(_) => {}
         Err(e) => {
-            log::error!("Unable to write to {}: {}", pid_file_path, e);
+            log::error!("Unable to write to {pid_file_path}: {e}");
             exit(1);
         }
     }
@@ -122,9 +122,9 @@ fn main() -> std::io::Result<()> {
                 let mut response = String::new();
                 socket.read_to_string(&mut response)?;
                 run_system_command(&response, log_path);
-                log::debug!("Socket: {:?} Address: {:?} Response: {}", socket, address, response);
+                log::debug!("Socket: {socket:?} Address: {address:?} Response: {response}");
             }
-            Err(e) => log::error!("accept function failed: {:?}", e),
+            Err(e) => log::error!("accept function failed: {e:?}"),
         }
     }
 }
@@ -146,20 +146,20 @@ fn run_system_command(command: &str, log_path: &Path) {
         .stdout(match OpenOptions::new().append(true).create(true).open(log_path) {
             Ok(file) => file,
             Err(e) => {
-                _ = Command::new("notify-send").arg(format!("ERROR {}", e)).spawn();
+                _ = Command::new("notify-send").arg(format!("ERROR {e}")).spawn();
                 exit(1);
             }
         })
         .stderr(match OpenOptions::new().append(true).create(true).open(log_path) {
             Ok(file) => file,
             Err(e) => {
-                _ = Command::new("notify-send").arg(format!("ERROR {}", e)).spawn();
+                _ = Command::new("notify-send").arg(format!("ERROR {e}")).spawn();
                 exit(1);
             }
         })
         .spawn()
     {
-        log::error!("Failed to execute {}", command);
-        log::error!("Error: {}", e);
+        log::error!("Failed to execute {command}");
+        log::error!("Error: {e}");
     }
 }

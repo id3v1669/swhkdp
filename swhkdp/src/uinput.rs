@@ -1,4 +1,4 @@
-use evdev::{uinput::VirtualDevice, AttributeSet, KeyCode, RelativeAxisCode, SwitchCode};
+use evdev::{AttributeSet, KeyCode, RelativeAxisCode, SwitchCode, uinput::VirtualDevice};
 
 #[cfg(feature = "rfkill")]
 use nix::ioctl_none;

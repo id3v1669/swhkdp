@@ -23,7 +23,7 @@ fn set_initgroups(user: &nix::unistd::User, gid: u32) {
     match nix::unistd::initgroups(&user.gecos, gid) {
         Ok(_) => log::debug!("Setting initgroups..."),
         Err(e) => {
-            log::error!("Failed to set init groups: {:#?}", e);
+            log::error!("Failed to set init groups: {e:#?}");
             exit(1);
         }
     }
@@ -34,7 +34,7 @@ fn set_egid(gid: u32) {
     match nix::unistd::setegid(gid) {
         Ok(_) => log::debug!("Setting EGID..."),
         Err(e) => {
-            log::error!("Failed to set EGID: {:#?}", e);
+            log::error!("Failed to set EGID: {e:#?}");
             exit(1);
         }
     }
@@ -45,7 +45,7 @@ fn set_euid(uid: u32) {
     match nix::unistd::seteuid(uid) {
         Ok(_) => log::debug!("Setting EUID..."),
         Err(e) => {
-            log::error!("Failed to set EUID: {:#?}", e);
+            log::error!("Failed to set EUID: {e:#?}");
             exit(1);
         }
     }

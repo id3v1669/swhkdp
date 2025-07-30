@@ -1,6 +1,6 @@
 [package]
 description = "Sxhkd clone for Wayland (works on TYY and X11 too)"
-edition = "2021"
+edition = "2024"
 name = "Simple-Wayland-HotKey-Daemon-Polkit"
 version = "1.3.1-git"
 authors = [

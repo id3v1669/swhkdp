@@ -3,7 +3,7 @@ use clap::Parser;
 use config::Hotkey;
 use evdev::{AttributeSet, Device, EventSummary, KeyCode};
 use nix::{
-    sys::stat::{umask, Mode},
+    sys::stat::{Mode, umask},
     unistd::{Group, Uid},
 };
 use signal_hook::consts::signal::*;
@@ -22,7 +22,7 @@ use std::{
 use sysinfo::System;
 use tokio::select;
 use tokio::time::Duration;
-use tokio::time::{sleep, Instant};
+use tokio::time::{Instant, sleep};
 use tokio_stream::{StreamExt, StreamMap};
 use tokio_udev::{AsyncMonitorSocket, EventType, MonitorBuilder};
 
@@ -71,10 +71,12 @@ struct Args {
 async fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
     let default_cooldown: u64 = 250;
-    env::set_var("RUST_LOG", "swhkdp=warn");
 
-    if args.debug {
-        env::set_var("RUST_LOG", "swhkdp=trace");
+    unsafe {
+        env::set_var("RUST_LOG", "swhkdp=warn");
+        if args.debug {
+            env::set_var("RUST_LOG", "swhkdp=trace");
+        }
     }
 
     env_logger::init();
@@ -94,19 +96,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let config_file_path: PathBuf =
             args.config.as_ref().map_or_else(|| env.fetch_config_path(), |file| file.clone());
 
-        log::debug!("Using config file path: {:#?}", config_file_path);
+        log::debug!("Using config file path: {config_file_path:#?}");
 
         // If no config is present
         // Creates a default config at location (read man 5 swhkdp)
 
         if !Path::new(&config_file_path).exists() {
-            log::warn!("No config found at path: {:#?}", config_file_path);
+            log::warn!("No config found at path: {config_file_path:#?}");
             create_default_config(invoking_uid, &config_file_path);
         }
 
         match config::load(&config_file_path) {
             Err(e) => {
-                log::error!("Config Error: {}", e);
+                log::error!("Config Error: {e}");
                 exit(1)
             }
             Ok(out) => {
@@ -160,7 +162,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut uinput_device = match uinput::create_uinput_device() {
         Ok(dev) => dev,
         Err(e) => {
-            log::error!("Failed to create uinput device: {:#?}", e);
+            log::error!("Failed to create uinput device: {e:#?}");
             exit(1);
         }
     };
@@ -168,7 +170,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut uinput_switches_device = match uinput::create_uinput_switches_device() {
         Ok(dev) => dev,
         Err(e) => {
-            log::error!("Failed to create uinput switches device: {:#?}", e);
+            log::error!("Failed to create uinput switches device: {e:#?}");
             exit(1);
         }
     };
@@ -254,7 +256,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             let _ = device.ungrab();
                         }
 
-                        log::warn!("Received signal: {:#?}", signal);
+                        log::warn!("Received signal: {signal:#?}");
                         log::warn!("Exiting...");
                         exit(1);
                     }
@@ -280,14 +282,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     EventType::Add => {
                         let mut device = match Device::open(node) {
                             Err(e) => {
-                                log::error!("Could not open evdev device at {}: {}", node, e);
+                                log::error!("Could not open evdev device at {node}: {e}");
                                 continue;
                             },
                             Ok(device) => device
                         };
                         if !to_ignore(&device) && (to_add(&device) || check_device_is_supported(&device)) {
                             let name = device.name().unwrap_or("[unknown]");
-                            log::info!("Device '{}' at '{}' added.", name, node);
+                            log::info!("Device '{name}' at '{node}' added.");
                             let _ = device.grab();
                             device_states.insert(node.to_string(), DeviceState::new());
                             device_stream_map.insert(node.to_string(), device.into_event_stream()?);
@@ -298,7 +300,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             device_states.remove(node);
                             let stream = device_stream_map.remove(node).expect("device not in stream_map");
                             let name = stream.device().name().unwrap_or("[unknown]");
-                            log::info!("Device '{}' at '{}' removed", name, node);
+                            log::info!("Device '{name}' at '{node}' removed");
                         }
                     }
                     _ => {
@@ -337,7 +339,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         continue
                     }
                 };
-                log::debug!("Key: {:#?}", key);
+                log::debug!("Key: {key:#?}");
 
                 match event.value() {
                     // Key press
@@ -478,25 +480,25 @@ pub fn setup_swhkdp(invoking_uid: u32, runtime_path: String) {
                 log::debug!("Created runtime directory.");
                 match fs::set_permissions(Path::new(&runtime_path), Permissions::from_mode(0o600)) {
                     Ok(_) => log::debug!("Set runtime directory to readonly."),
-                    Err(e) => log::error!("Failed to set runtime directory to readonly: {}", e),
+                    Err(e) => log::error!("Failed to set runtime directory to readonly: {e}"),
                 }
             }
-            Err(e) => log::error!("Failed to create runtime directory: {}", e),
+            Err(e) => log::error!("Failed to create runtime directory: {e}"),
         }
     }
 
     // Get the PID file path for instance tracking.
-    let pidfile: String = format!("{}swhkdp_{}.pid", runtime_path, invoking_uid);
+    let pidfile: String = format!("{runtime_path}swhkdp_{invoking_uid}.pid");
     if Path::new(&pidfile).exists() {
-        log::trace!("Reading {} file and checking for running instances.", pidfile);
+        log::trace!("Reading {pidfile} file and checking for running instances.");
         let swhkdp_pid = match fs::read_to_string(&pidfile) {
             Ok(swhkdp_pid) => swhkdp_pid,
             Err(e) => {
-                log::error!("Unable to read {} to check all running instances", e);
+                log::error!("Unable to read {e} to check all running instances");
                 exit(1);
             }
         };
-        log::debug!("Previous PID: {}", swhkdp_pid);
+        log::debug!("Previous PID: {swhkdp_pid}");
 
         // Check if swhkdp is already running!
         let mut sys = System::new_all();
@@ -506,7 +508,7 @@ pub fn setup_swhkdp(invoking_uid: u32, runtime_path: String) {
                 && process.exe() == env::current_exe().unwrap().parent()
             {
                 log::error!("swhkdp is already running!");
-                log::error!("pid of existing swhkdp process: {}", pid);
+                log::error!("pid of existing swhkdp process: {pid}");
                 log::error!("To close the existing swhkdp process, run `sudo killall swhkdp`");
                 exit(1);
             }
@@ -517,7 +519,7 @@ pub fn setup_swhkdp(invoking_uid: u32, runtime_path: String) {
     match fs::write(&pidfile, id().to_string()) {
         Ok(_) => {}
         Err(e) => {
-            log::error!("Unable to write to {}: {}", pidfile, e);
+            log::error!("Unable to write to {pidfile}: {e}");
             exit(1);
         }
     }
@@ -534,11 +536,11 @@ pub fn create_default_config(invoking_uid: u32, config_file_path: &PathBuf) {
     perms::raise_privileges();
     match fs::File::create(config_file_path) {
         Ok(mut file) => {
-            log::debug!("Created default swhkdp config at: {:#?}", config_file_path);
+            log::debug!("Created default swhkdp config at: {config_file_path:#?}");
             _ = file.write_all(b"# Comments start with #, uncomment to use \n#start a terminal\n#super + return\n#\talacritty # replace with terminal of your choice");
         }
         Err(err) => {
-            log::error!("Error creating config file: {}", err);
+            log::error!("Error creating config file: {err}");
             exit(1);
         }
     };
@@ -551,7 +553,7 @@ pub fn send_command(
     modes: &[config::Mode],
     mode_stack: &mut Vec<usize>,
 ) {
-    log::info!("Hotkey pressed: {:#?}", hotkey);
+    log::info!("Hotkey pressed: {hotkey:#?}");
     let command = hotkey.action;
     let mut commands_to_send = String::new();
     if modes[mode_stack[mode_stack.len() - 1]].options.oneoff {
@@ -587,6 +589,6 @@ pub fn send_command(
     if let Err(e) = socket_write(&commands_to_send, socket_path.to_path_buf()) {
         log::error!("Failed to send command to swhks through IPC.");
         log::error!("Please make sure that swhks is running.");
-        log::error!("Err: {:#?}", e)
+        log::error!("Err: {e:#?}")
     };
 }
