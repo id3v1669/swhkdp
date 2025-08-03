@@ -34,11 +34,20 @@ mod uinput;
 struct DeviceState {
     state_modifiers: AttributeSet<KeyCode>,
     state_keysyms: AttributeSet<KeyCode>,
+    hi_res_wheel: bool,
 }
 
 impl DeviceState {
-    fn new() -> DeviceState {
-        DeviceState { state_modifiers: AttributeSet::new(), state_keysyms: AttributeSet::new() }
+    fn new(device: &Device) -> DeviceState {
+        let hi_res_wheel = device
+            .supported_relative_axes()
+            .is_some_and(|axes| axes.contains(evdev::RelativeAxisCode::REL_WHEEL_HI_RES));
+
+        DeviceState {
+            state_modifiers: AttributeSet::new(),
+            state_keysyms: AttributeSet::new(),
+            hi_res_wheel,
+        }
     }
 }
 
@@ -199,7 +208,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 continue;
             }
         };
-        device_states.insert(path.to_string(), DeviceState::new());
+        device_states.insert(path.to_string(), DeviceState::new(&device));
         device_stream_map.insert(path.to_string(), device.into_event_stream()?);
     }
 
@@ -291,7 +300,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             let name = device.name().unwrap_or("[unknown]");
                             log::info!("Device '{name}' at '{node}' added.");
                             let _ = device.grab();
-                            device_states.insert(node.to_string(), DeviceState::new());
+                            device_states.insert(node.to_string(), DeviceState::new(&device));
                             device_stream_map.insert(node.to_string(), device.into_event_stream()?);
                         }
                     }
@@ -327,9 +336,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     }
                     EventSummary::RelativeAxis(_, rlcode, _) => {
                         match rlcode {
-                            // temp solution for double input on mouse wheel
-                            // TODO: use REL_WHEEL_HI_RES by default and fallback to REL_WHEEL if not supported by device
-                            evdev::RelativeAxisCode::REL_WHEEL_HI_RES => {}
+                            evdev::RelativeAxisCode::REL_WHEEL_HI_RES => {
+                                if device_state.hi_res_wheel {
+                                    uinput_device.emit(&[event]).unwrap();
+                                }
+                            }
+                            evdev::RelativeAxisCode::REL_WHEEL => {
+                                if !device_state.hi_res_wheel {
+                                    uinput_device.emit(&[event]).unwrap();
+                                }
+                            }
                             _ => uinput_device.emit(&[event]).unwrap(),
                         }
                         continue
