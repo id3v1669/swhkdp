@@ -1,4 +1,4 @@
-//! Environ.rs
+//! environ.rs
 //! Defines modules and structs for handling environment variables and paths.
 
 use std::{env::VarError, path::PathBuf};
@@ -12,82 +12,52 @@ pub struct Env {
     pub runtime_dir: PathBuf,
 }
 
-/// Error type for the Env struct.
-/// Contains all the possible errors that can occur when trying to get an environment variable.
-#[derive(Debug)]
-pub enum EnvError {
-    DataHomeNotSet,
-    HomeNotSet,
-    PathNotFound,
-    GenericError(String),
-}
-
 impl Env {
     /// Constructs a new Env struct.
     /// This function is called only once and the result is stored in a static variable.
-    pub fn construct() -> Self {
-        let home = match Self::get_env("HOME") {
-            Ok(val) => val,
-            Err(e) => match e {
-                EnvError::HomeNotSet => {
-                    log::error!(
-                        "HOME Variable is not set/found, cannot fall back on hardcoded path for XDG_DATA_HOME."
-                    );
-                    std::process::exit(1);
-                }
-                EnvError::GenericError(err) => {
-                    log::error!("Generic error: {err:#?}");
-                    std::process::exit(1);
-                }
-                _ => {
-                    log::error!("Unexpected error: {e:#?}");
-                    std::process::exit(1);
-                }
-            },
-        };
+    pub fn construct() -> Result<Self, VarError> {
+        // Should exist in any system, so not handling errors here.
+        let home = Self::get_env("HOME")?;
 
-        let data_home = match Self::get_env("XDG_DATA_HOME") {
-            Ok(val) => val,
-            Err(e) => match e {
-                EnvError::DataHomeNotSet | EnvError::PathNotFound => {
-                    log::warn!(
-                        "XDG_DATA_HOME Variable is not set, falling back on hardcoded path."
-                    );
-                    home.join(".local/share")
-                }
-                EnvError::GenericError(err) => {
-                    log::error!("Generic error: {err:#?}");
-                    std::process::exit(1);
-                }
-                _ => {
-                    log::error!("Unexpected error: {e:#?}");
-                    std::process::exit(1);
-                }
-            },
-        };
+        let data_home = Self::get_env("XDG_DATA_HOME").unwrap_or_else(|_| {
+            log::warn!("XDG_DATA_HOME not set, falling back to ~/.local/share");
+            home.join(".local/share")
+        });
 
-        let runtime_dir = PathBuf::from(format!("/run/user/{}", unistd::Uid::current()));
+        let runtime_dir = Self::get_env("XDG_RUNTIME_DIR").unwrap_or_else(|_| {
+            log::warn!("XDG_RUNTIME_DIR not set, falling back to /run/user/<uid>");
+            PathBuf::from(format!("/run/user/{}", unistd::Uid::current()))
+        });
 
-        Self { data_home, runtime_dir }
+        Ok(Self { data_home, runtime_dir })
     }
 
-    /// Actual interface to get the environment variable.
-    fn get_env(name: &str) -> Result<PathBuf, EnvError> {
-        match std::env::var(name) {
-            Ok(val) => match PathBuf::from(&val).exists() {
-                true => Ok(PathBuf::from(val)),
-                false => Err(EnvError::PathNotFound),
-            },
-            Err(e) => match e {
-                VarError::NotPresent => match name {
-                    "XDG_DATA_HOME" => Err(EnvError::DataHomeNotSet),
-                    "HOME" => Err(EnvError::HomeNotSet),
-                    _ => Err(EnvError::GenericError(format!("{name} not set"))),
-                },
-                VarError::NotUnicode(_) => {
-                    Err(EnvError::GenericError(format!("{name} not unicode")))
-                }
-            },
+    /// Function to ensure paths are available.
+    pub fn ensure_paths_exist(&self) -> std::io::Result<()> {
+        // Create data_home directory in case of clean system installation
+        if !self.data_home.exists() {
+            log::info!("Creating data directory: {}", self.data_home.display());
+            std::fs::create_dir_all(&self.data_home)?;
         }
+
+        // For runtime_dir, only check existence as it must be created by the system (systemd/init) at /run/user/<uid>
+        if !self.runtime_dir.exists() {
+            log::error!(
+                "Runtime directory {} does not exist. This should be created by the system.",
+                self.runtime_dir.display()
+            );
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "Runtime directory does not exist",
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// Gets an environment variable and converts it to PathBuf.
+    /// Does not check if the path exists.
+    fn get_env(name: &str) -> Result<PathBuf, VarError> {
+        std::env::var(name).map(PathBuf::from)
     }
 }

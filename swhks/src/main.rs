@@ -7,7 +7,9 @@ use nix::{
 use std::io::Read;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{
-    env, fs,
+    env,
+    env::VarError,
+    fs,
     fs::OpenOptions,
     os::unix::net::UnixListener,
     path::{Path, PathBuf},
@@ -44,9 +46,24 @@ fn main() -> std::io::Result<()> {
     umask(Mode::S_IWGRP | Mode::S_IWOTH);
 
     // This is used to initialize the environment variables only once
-    let environment = environ::Env::construct();
+    let environ = Env::construct().unwrap_or_else(|e| {
+        match e {
+            VarError::NotPresent => {
+                eprintln!("HOME environment variable is not set");
+            }
+            VarError::NotUnicode(_) => {
+                eprintln!("HOME environment variable contains invalid Unicode");
+            }
+        }
+        std::process::exit(1);
+    });
 
-    let (pid_file_path, sock_file_path) = get_file_paths(&environment);
+    environ.ensure_paths_exist().unwrap_or_else(|e| {
+        eprintln!("Failed to create/verify necessary directories: {e}");
+        std::process::exit(1);
+    });
+
+    let (pid_file_path, sock_file_path) = get_file_paths(&environ);
 
     let log_file_name = if let Some(val) = args.log {
         val
@@ -59,7 +76,7 @@ fn main() -> std::io::Result<()> {
             }
         };
 
-        format!("{}/swhks/swhks-{}.log", environment.data_home.to_string_lossy(), time).into()
+        format!("{}/swhks/swhks-{}.log", environ.data_home.to_string_lossy(), time).into()
     };
 
     let log_path = Path::new(&log_file_name);
