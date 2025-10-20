@@ -47,12 +47,12 @@ After opening `swhkdp`, you can control the program through signals:
 
 ## Configuration
 
-`swhkdp` uses configuration files that follows yml or json syntax, [detailed
+`swhkdp` uses configuration files that follows json syntax, [detailed
 instructions can be found in CONFIGURATION.md](./CONFIGURATION.md)
 
-The default configuration file is in `/etc/swhkdp/swhkdp.yml`. If you don't like
+The default configuration file is in `/etc/swhkdp/swhkdp.json`. If you don't like
 having to edit the file as root every single time, you can create a symlink from
-`~/.config/swhkdp/swhkdp.yml` to `/etc/swhkdp/swhkdp.yml`.
+`~/.config/swhkdp/swhkdp.json` to `/etc/swhkdp/swhkdp.json`.
 
 Not sure what key to use, launch swhkdp with -d option and press needed key,
 it will be shown in logs as `DEBUG swhkdp] Key: KEY_C`

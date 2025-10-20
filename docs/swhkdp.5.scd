@@ -6,12 +6,12 @@ swhkdp	- Hotkey daemon inspired by sxhkd written in Rust
 
 # CONFIG FILE
 
-	- A global config can be defined in */etc/swhkdp/swhkdp.yml.
+	- A global config can be defined in */etc/swhkdp/swhkdp.json.
 	- A local config overrides the global one. Local configs should be placed in the root of the project.
 
 # SYNTAX
 
-Syntax follows yml or json format
+Syntax follows json format
 
 For valid keys and modifiers, launch swhkdp with debug -d flag and press key,
 in logs key will appear in format: `DEBUG swhkdp] Key: KEY_C`

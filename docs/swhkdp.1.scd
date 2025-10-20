@@ -10,12 +10,12 @@ swhkdp - Hotkey daemon inspired by sxhkd written in Rust
 
 # CONFIG FILE
 
-The config file goes in */etc/swhkdp/swhkdp.yml*.
+The config file goes in */etc/swhkdp/swhkdp.json*.
 
 This can be avoided as such:
 	- Using the *include* statement in your config file.
 	- Using the *-c* flag to mention a custom config file at runtime.
-	- Symlinking the config file from *~/.config/swhkdp/swhkdp.yml* or any other directory of choice to */etc/swhkdp/swhkdp.yml*.
+	- Symlinking the config file from *~/.config/swhkdp/swhkdp.json* or any other directory of choice to */etc/swhkdp/swhkdp.json*.
 
 More about the config file syntax in `swhkdp(5)`
 

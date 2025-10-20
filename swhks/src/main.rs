@@ -80,12 +80,11 @@ fn main() -> std::io::Result<()> {
     };
 
     let log_path = Path::new(&log_file_name);
-    if let Some(p) = log_path.parent() {
-        if !p.exists() {
-            if let Err(e) = fs::create_dir_all(p) {
+    if let Some(p) = log_path.parent() && !p.exists() 
+            && let Err(e) = fs::create_dir_all(p) {
                 log::error!("Failed to create log dir: {e}");
-            }
-        }
+            
+        
     }
 
     if Path::new(&pid_file_path).exists() {

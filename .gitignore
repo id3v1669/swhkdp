@@ -8,4 +8,4 @@ com.github.swhkdp.pkexec.policy
 !*rc/
 .direnv
 test.log
-test.yml
+test.json

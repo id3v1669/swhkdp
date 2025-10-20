@@ -375,17 +375,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             last_hotkey = None;
                         }
                         if config::ALLOWED_MODIFIERS.contains(&key) {
-                            if let Some(hotkey) = &last_hotkey {
-                                if hotkey.modifiers().contains(&key) {
+                            if let Some(hotkey) = &last_hotkey && hotkey.modifiers().contains(&key) {
                                     last_hotkey = None;
-                                }
                             }
                             device_state.state_modifiers.remove(key);
                         } else if device_state.state_keysyms.contains(key) {
-                            if let Some(hotkey) = &last_hotkey {
-                                if key == hotkey.keysym() {
+                            if let Some(hotkey) = &last_hotkey && key == hotkey.keysym() {
                                     last_hotkey = None;
-                                }
+                            
                             }
                             device_state.state_keysyms.remove(key);
                         }

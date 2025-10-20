@@ -52,7 +52,7 @@ impl Env {
     }
 
     pub fn fetch_config_path(&self) -> PathBuf {
-        PathBuf::from(&self.config_folder_location).join("swhkdp/swhkdp.yml")
+        PathBuf::from(&self.config_folder_location).join("swhkdp/swhkdp.json")
     }
 
     pub fn fetch_runtime_socket_path(&self) -> PathBuf {

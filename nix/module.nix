@@ -63,17 +63,17 @@ in {
       description = "Simple Wayland HotKey Daemon";
       bindsTo = ["default.target"];
       script = let
-        swhkdpyml = pkgs.writeText "swhkdp.yml" "${lib.generators.toYAML {} cfg.settings}";
-        swhkdpymlCmd =
+        swhkdpcfg = pkgs.writeText "swhkdp.json" (builtins.toJSON cfg.settings);
+        swhkdpCmd =
           if cfg.settings != null
-          then "--config ${swhkdpyml}"
+          then "--config ${swhkdpcfg}"
           else "";
         devicesCmd =
           if cfg.devices != []
           then "-D \"${lib.concatStringsSep "|" cfg.devices}\""
           else "";
       in ''
-        /run/wrappers/bin/pkexec ${cfg.package}/bin/swhkdp ${swhkdpymlCmd} ${devicesCmd}\
+        /run/wrappers/bin/pkexec ${cfg.package}/bin/swhkdp ${swhkdpCmd} ${devicesCmd}\
           --cooldown ${toString cfg.cooldown} \
           -I "${lib.concatStringsSep "|" cfg.ignore}"
       '';
