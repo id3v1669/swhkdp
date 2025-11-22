@@ -382,7 +382,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         } else if device_state.state_keysyms.contains(key) {
                             if let Some(hotkey) = &last_hotkey && key == hotkey.keysym() {
                                     last_hotkey = None;
-                            
+
                             }
                             device_state.state_keysyms.remove(key);
                         }
@@ -416,7 +416,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
                 log::debug!("state_modifiers: {:#?}", device_state.state_modifiers);
                 log::debug!("state_keysyms: {:#?}", device_state.state_keysyms);
-                //log::debug!("hotkey: {:#?}", possible_hotkeys);
 
                 for hotkey in possible_hotkeys {
                     // this should check if state_modifiers and hotkey.modifiers have the same elements
@@ -468,12 +467,14 @@ pub fn check_input_group() -> Result<(), Box<dyn Error>> {
 
 pub fn check_device_is_supported(device: &Device) -> bool {
     if device.supported_events().contains(evdev::EventType::KEY)
+        && !device.supported_events().contains(evdev::EventType::FORCEFEEDBACK)
         && !device.supported_keys().is_some_and(|keys| keys.contains(KeyCode::BTN_TOUCH))
     {
         if device.name() == Some("swhkdp virtual output") {
             return false;
         }
         log::debug!("Device: {}", device.name().unwrap(),);
+        log::debug!("Supported Events: {:?}", device.supported_events());
         true
     } else {
         log::trace!("Other: {}", device.name().unwrap(),);

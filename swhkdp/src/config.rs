@@ -115,7 +115,7 @@ pub struct ModeOptions {
 
 pub fn load(path: &Path) -> Result<Config, Error> {
     let config_content_raw = fs::read_to_string(path).unwrap();
-    let config_new: ConfigRead =  serde_json::from_str(&config_content_raw).unwrap();
+    let config_new: ConfigRead = serde_json::from_str(&config_content_raw).unwrap();
     let mut modes_to_return: Vec<Mode> = Vec::new();
     let mut remaps_to_return: HashMap<KeyCode, KeyCode> = HashMap::new();
     for mode in config_new.modes.iter() {

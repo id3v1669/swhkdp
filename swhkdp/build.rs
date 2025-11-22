@@ -13,8 +13,9 @@ fn main() {
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
-    && let ErrorKind::NotFound = e.kind() {
-            exit(0);
+        && let ErrorKind::NotFound = e.kind()
+    {
+        exit(0);
     }
 
     // We just append "out" so it's easy to find all the scdoc output later in line 38.
