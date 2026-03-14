@@ -7,13 +7,18 @@ self: {
   cfg = config.services.swhkdp;
   format = pkgs.formats.yaml {};
   inherit (pkgs.stdenv.hostPlatform) system;
-
   inherit (lib) types;
   inherit (lib.modules) mkIf;
   inherit (lib.options) mkOption mkEnableOption;
 in {
   options.services.swhkdp = {
     enable = mkEnableOption "Simple Wayland HotKey Daemon";
+
+    username = mkOption {
+      description = "Username to resolve profile PATH for the swhks user service.";
+      type = types.nullOr types.str;
+      default = null;
+    };
 
     package = mkOption {
       description = "The package to use for `swhkdp`";
@@ -57,6 +62,13 @@ in {
   };
 
   config = mkIf cfg.enable {
+    assertions = [
+      {
+        assertion = cfg.username != null;
+        message = "services.swhkdp.username must be set when swhkdp is enabled.";
+      }
+    ];
+
     environment.systemPackages = [cfg.package];
 
     systemd.user.services.swhkdp = {
@@ -80,6 +92,23 @@ in {
       serviceConfig.Restart = "always";
       wantedBy = ["default.target"];
     };
+
+    systemd.user.services.swhks = {
+      description = "Simple Wayland HotKey Daemon User Service";
+      bindsTo = ["graphical-session.target"];
+      after = ["graphical-session.target"];
+      serviceConfig = {
+        ExecStart = "${lib.getExe' cfg.package "swhks"}";
+        Restart = "always";
+        KillMode = "process";
+      };
+      path = [
+        "/etc/profiles/per-user/${cfg.username}"
+        "/run/current-system/sw"
+      ];
+      wantedBy = ["graphical-session.target"];
+    };
+
     security.polkit = {
       enable = true;
       extraConfig = ''

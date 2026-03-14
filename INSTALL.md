@@ -29,6 +29,7 @@ After importing you should be able to use it in your configuration.nix file:
 {
   services.swhkdp = {
     enable = true;
+    username = "user";
     package = inputs.swhkdp.packages.${system}.default.override { rfkillFeature = true; };
     cooldown = 300;
     # To get device names use command `libinput list-devices | grep -i Device:`
@@ -63,7 +64,6 @@ After importing you should be able to use it in your configuration.nix file:
 }
 ```
 * rfkill is feature related to [this](https://github.com/waycrate/swhkd/pull/254) pr/discussion
-* Do not forget to start/add to autostart swhkdp of your system after login.
 * Replace HOSTNAME with your oun
 
 ps. this module will be updated to support devices, but it is already good enough to use

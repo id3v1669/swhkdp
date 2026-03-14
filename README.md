@@ -28,6 +28,8 @@ Xorg or Wayland desktops, and you can even use `swhkdp` in a TTY.
 
 ## Installation and Building
 
+### Warning: installation instructions are updated for nixos only, for other distros old instructions are present, but changes required.
+
 [Installation and building instructions can be found here.](./INSTALL.md)
 
 ## Running

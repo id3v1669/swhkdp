@@ -1,9 +1,6 @@
 use clap::Parser;
 use environ::Env;
-use nix::{
-    sys::stat::{Mode, umask},
-    unistd::daemon,
-};
+use nix::sys::stat::{Mode, umask};
 use std::io::Read;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{
@@ -12,6 +9,7 @@ use std::{
     fs,
     fs::OpenOptions,
     os::unix::net::UnixListener,
+    os::unix::process::CommandExt,
     path::{Path, PathBuf},
     process::{Command, Stdio, exit, id},
 };
@@ -153,8 +151,6 @@ fn get_file_paths(env: &Env) -> (String, String) {
 }
 
 fn run_system_command(command: &str, log_path: &Path) {
-    _ = daemon(true, false);
-
     if let Err(e) = Command::new("sh")
         .arg("-c")
         .arg(command)
@@ -173,6 +169,7 @@ fn run_system_command(command: &str, log_path: &Path) {
                 exit(1);
             }
         })
+        .process_group(0)
         .spawn()
     {
         log::error!("Failed to execute {command}");
