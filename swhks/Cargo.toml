@@ -1,12 +1,10 @@
 [package]
 description = "Server for swhkdp to run shell commands at invoking user level."
-edition = "2024"
-license = "BSD-2-Clause"
-name = "swhks"
-version = "1.3.1-git"
-authors = [
-	"id3v1669 <id3v1669@gmail.com>\n",
-]
+name = "Simple-Wayland-HotKey-Server"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+authors.workspace = true
 
 [dependencies]
 env_logger.workspace = true

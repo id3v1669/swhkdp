@@ -34,14 +34,14 @@ struct Args {
 fn main() -> std::io::Result<()> {
     let args = Args::parse();
     if args.debug {
-        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("swhks=trace"))
+        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("swhks=debug"))
             .init();
     } else {
         env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("swhks=warn"))
             .init();
     }
 
-    log::trace!("Setting process umask.");
+    log::debug!("Setting process umask.");
     umask(Mode::S_IWGRP | Mode::S_IWOTH);
 
     // This is used to initialize the environment variables only once
@@ -87,7 +87,7 @@ fn main() -> std::io::Result<()> {
     }
 
     if Path::new(&pid_file_path).exists() {
-        log::trace!("Reading {pid_file_path} file and checking for running instances.");
+        log::debug!("Reading {pid_file_path} file and checking for running instances.");
         let swhks_pid = match fs::read_to_string(&pid_file_path) {
             Ok(swhks_pid) => swhks_pid,
             Err(e) => {
@@ -113,7 +113,7 @@ fn main() -> std::io::Result<()> {
     }
 
     if Path::new(&sock_file_path).exists() {
-        log::trace!("Sockfile exists, attempting to remove it.");
+        log::debug!("Sockfile exists, attempting to remove it.");
         match fs::remove_file(&sock_file_path) {
             Ok(_) => {
                 log::debug!("Removed old socket file");

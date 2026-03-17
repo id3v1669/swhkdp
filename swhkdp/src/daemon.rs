@@ -81,18 +81,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
     let default_cooldown: u64 = 250;
 
-    unsafe {
-        env::set_var("RUST_LOG", "swhkdp=warn");
-        if args.debug {
-            env::set_var("RUST_LOG", "swhkdp=trace");
-        }
+    if args.debug {
+        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("swhks=debug"))
+            .init();
+    } else {
+        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("swhks=warn"))
+            .init();
     }
 
-    env_logger::init();
-    log::trace!("Logger initialized.");
-
     let env = environ::Env::construct();
-    log::trace!("Environment Aquired");
+    log::debug!("Environment Aquired");
 
     let invoking_uid = env.pkexec_id;
 
@@ -142,7 +140,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let supported_devices: Vec<(PathBuf, Device)> = {
         if arg_add_devices.is_empty() {
-            log::trace!("Attempting to find all supported devices file descriptors.");
+            log::debug!("Attempting to find all supported devices file descriptors.");
             evdev::enumerate()
                 .filter(|(_, dev)| !to_ignore(dev) && check_device_is_supported(dev))
                 .collect()
@@ -313,7 +311,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         }
                     }
                     _ => {
-                        log::trace!("Ignored udev event of type: {:?}", event.event_type());
+                        log::debug!("Ignored udev event of type: {:?}", event.event_type());
                     }
                 }
             }
@@ -477,14 +475,14 @@ pub fn check_device_is_supported(device: &Device) -> bool {
         log::debug!("Supported Events: {:?}", device.supported_events());
         true
     } else {
-        log::trace!("Other: {}", device.name().unwrap(),);
+        log::debug!("Other: {}", device.name().unwrap(),);
         false
     }
 }
 
 pub fn setup_swhkdp(invoking_uid: u32, runtime_path: String) {
     // Set a sane process umask.
-    log::trace!("Setting process umask.");
+    log::debug!("Setting process umask.");
     umask(Mode::S_IWGRP | Mode::S_IWOTH);
 
     // Get the runtime path and create it if needed.
@@ -504,7 +502,7 @@ pub fn setup_swhkdp(invoking_uid: u32, runtime_path: String) {
     // Get the PID file path for instance tracking.
     let pidfile: String = format!("{runtime_path}swhkdp_{invoking_uid}.pid");
     if Path::new(&pidfile).exists() {
-        log::trace!("Reading {pidfile} file and checking for running instances.");
+        log::debug!("Reading {pidfile} file and checking for running instances.");
         let swhkdp_pid = match fs::read_to_string(&pidfile) {
             Ok(swhkdp_pid) => swhkdp_pid,
             Err(e) => {

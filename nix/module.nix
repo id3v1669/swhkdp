@@ -44,8 +44,10 @@ in {
     };
 
     settings = mkOption {
-      description = "settings";
-      default = "";
+      description = "Path to config file or config string for `swhkdp`";
+      default = ''
+        KEY_LEFTMETA+KEY_LEFTSHIFT+KEY_T kitty
+      '';
       type = types.either types.str types.path;
     };
   };
