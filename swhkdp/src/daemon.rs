@@ -130,8 +130,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let mut config = load_config();
     let mut modes = config.modes;
-    let mut remaps = config.remaps;
-    let mut mode_stack: Vec<usize> = vec![0];
+    let mut current_mode: usize = config.default_mode;
+    let mut default_mode: usize = config.default_mode;
     let arg_add_devices = args.devices;
     let arg_ignore_devices = args.ignoredevices;
 
@@ -225,7 +225,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 if hotkey.keybind.on_release {
                     continue;
                 }
-                send_command(hotkey.clone(), &socket_file_path, &modes, &mut mode_stack);
+                send_command(hotkey.clone(), &socket_file_path, &modes, &mut current_mode, default_mode);
                 hotkey_repeat_timer.as_mut().reset(Instant::now() + Duration::from_millis(repeat_cooldown_duration));
             }
 
@@ -248,8 +248,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     SIGHUP => {
                         config = load_config();
                         modes = config.modes;
-                        remaps = config.remaps;
-                        mode_stack = vec![0];
+                        default_mode = config.default_mode;
+                        current_mode = config.default_mode;
                     }
 
                     SIGINT => {
@@ -322,7 +322,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 let device_state = &mut device_states.get_mut(&node).expect("device not in states map");
                 let key = match event.destructure() {
                     EventSummary::Key(_, keycode, _) => {
-                        match remaps.get(&keycode) {
+                        match modes[current_mode].remaps.get(&keycode) {
                             Some(remapped_keycode) => {
                                 event = evdev::InputEvent::new(event.event_type().0, remapped_keycode.0, event.value());
                                 *remapped_keycode
@@ -371,7 +371,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     0 => {
                         if last_hotkey.is_some() && pending_release {
                             pending_release = false;
-                            send_command(last_hotkey.clone().unwrap(), &socket_file_path, &modes, &mut mode_stack);
+                            send_command(last_hotkey.clone().unwrap(), &socket_file_path, &modes, &mut current_mode, default_mode);
                             last_hotkey = None;
                         }
                         if config::ALLOWED_MODIFIERS.contains(&key) {
@@ -390,11 +390,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     _ => {}
                 }
 
-                let possible_hotkeys: Vec<&config::Hotkey> = modes[mode_stack[mode_stack.len() - 1]].hotkeys.iter()
+                let possible_hotkeys: Vec<&config::Hotkey> = modes[current_mode].hotkeys.iter()
                     .filter(|hotkey| hotkey.modifiers().len() == device_state.state_modifiers.iter().count())
                     .collect();
 
-                let event_in_hotkeys = modes[mode_stack[mode_stack.len() - 1]].hotkeys.iter().any(|hotkey| {
+                let event_in_hotkeys = modes[current_mode].hotkeys.iter().any(|hotkey| {
                     hotkey.keysym().code() == event.code() &&
                         (device_state.state_modifiers
                         .iter()
@@ -404,7 +404,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         });
 
                 // Only emit event to virtual device when swallow option is off
-                if !modes[mode_stack[mode_stack.len()-1]].options.swallow
+                if !modes[current_mode].options.swallow
                 // Don't emit event to virtual device if it's from a valid hotkey
                 && !event_in_hotkeys {
                     uinput_device.emit(&[event]).unwrap();
@@ -429,7 +429,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             pending_release = true;
                             break;
                         }
-                        send_command(hotkey.clone(), &socket_file_path, &modes, &mut mode_stack);
+                        send_command(hotkey.clone(), &socket_file_path, &modes, &mut current_mode, default_mode);
                         hotkey_repeat_timer.as_mut().reset(Instant::now() + Duration::from_millis(repeat_cooldown_duration));
                         continue;
                     }
@@ -551,7 +551,7 @@ pub fn create_default_config(invoking_uid: u32, config_file_path: &PathBuf) {
     match fs::File::create(config_file_path) {
         Ok(mut file) => {
             log::debug!("Created default swhkdp config at: {config_file_path:#?}");
-            _ = file.write_all(b"# Comments start with #, uncomment to use \n#start a terminal\n#super + return\n#\talacritty # replace with terminal of your choice");
+            _ = file.write_all(b"// Default swhkdp config\nmaster {\n  // Uncomment to use:\n  // KEY_LEFTMETA+KEY_RETURN \"alacritty\"\n}\ngeneral {\n  default master\n  oneoff #false\n  swallow #false\n}\n");
         }
         Err(err) => {
             log::error!("Error creating config file: {err}");
@@ -565,13 +565,14 @@ pub fn send_command(
     hotkey: Hotkey,
     socket_path: &Path,
     modes: &[config::Mode],
-    mode_stack: &mut Vec<usize>,
+    current_mode: &mut usize,
+    default_mode: usize,
 ) {
     log::info!("Hotkey pressed: {hotkey:#?}");
     let command = hotkey.action;
     let mut commands_to_send = String::new();
-    if modes[mode_stack[mode_stack.len() - 1]].options.oneoff {
-        mode_stack.pop();
+    if modes[*current_mode].options.oneoff {
+        *current_mode = default_mode;
     }
     if command.contains('@') {
         let commands = command.split("&&").map(|s| s.trim()).collect::<Vec<_>>();
@@ -580,16 +581,24 @@ pub fn send_command(
             match words.next().unwrap() {
                 config::MODE_ENTER_STATEMENT => {
                     let enter_mode = cmd.split(' ').nth(1).unwrap();
-                    for (i, mode) in modes.iter().enumerate() {
-                        if mode.name == enter_mode {
-                            mode_stack.push(i);
-                            break;
+                    if enter_mode == "default" {
+                        *current_mode = default_mode;
+                        log::info!("Switching to default mode: {}", modes[*current_mode].name);
+                    } else {
+                        let mut found = false;
+                        for (i, mode) in modes.iter().enumerate() {
+                            if mode.name == enter_mode {
+                                *current_mode = i;
+                                found = true;
+                                break;
+                            }
+                        }
+                        if found {
+                            log::info!("Switching to mode: {}", modes[*current_mode].name);
+                        } else {
+                            log::warn!("Mode not found: {enter_mode}");
                         }
                     }
-                    log::info!("Entering mode: {}", modes[mode_stack[mode_stack.len() - 1]].name);
-                }
-                config::MODE_ESCAPE_STATEMENT => {
-                    mode_stack.pop();
                 }
                 _ => commands_to_send.push_str(format!("{cmd} &&").as_str()),
             }
@@ -600,9 +609,11 @@ pub fn send_command(
     if commands_to_send.ends_with(" &&") {
         commands_to_send = commands_to_send.strip_suffix(" &&").unwrap().to_string();
     }
-    if let Err(e) = socket_write(&commands_to_send, socket_path.to_path_buf()) {
+    if !commands_to_send.is_empty()
+        && let Err(e) = socket_write(&commands_to_send, socket_path.to_path_buf())
+    {
         log::error!("Failed to send command to swhks through IPC.");
         log::error!("Please make sure that swhks is running.");
         log::error!("Err: {e:#?}")
-    };
+    }
 }

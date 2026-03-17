@@ -5,7 +5,6 @@ self: {
   ...
 }: let
   cfg = config.services.swhkdp;
-  format = pkgs.formats.yaml {};
   inherit (pkgs.stdenv.hostPlatform) system;
   inherit (lib) types;
   inherit (lib.modules) mkIf;
@@ -45,19 +44,9 @@ in {
     };
 
     settings = mkOption {
-      description = "The config to use for `swhkdp` syntax and samples could found in [repo](https://github.com/id3v1669/swhkdp).";
-      type = format.type;
-      default = {
-        modes = {
-          normal = {
-            swallow = false;
-            oneoff = false;
-            hotkeys = {
-              "KEY_LEFTMETA+KEY_LEFTSHIFT+KEY_T".action = "alacritty";
-            };
-          };
-        };
-      };
+      description = "settings";
+      default = "";
+      type = types.either types.str types.path;
     };
   };
 
@@ -75,7 +64,10 @@ in {
       description = "Simple Wayland HotKey Daemon";
       bindsTo = ["default.target"];
       script = let
-        swhkdpcfg = pkgs.writeText "swhkdp.json" (builtins.toJSON cfg.settings);
+        swhkdpcfg =
+          if builtins.isPath cfg.settings
+          then cfg.settings
+          else pkgs.writeText "swhkdp.kdl" cfg.settings;
         swhkdpCmd =
           if cfg.settings != null
           then "--config ${swhkdpcfg}"

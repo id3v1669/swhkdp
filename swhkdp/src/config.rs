@@ -1,65 +1,27 @@
 use evdev::KeyCode;
-use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::str::FromStr;
 use std::{fmt, path::Path};
 
-#[derive(Debug, Deserialize)]
-pub struct ConfigRead {
-    pub modes: HashMap<String, ConfigReadMode>,
-    pub remaps: Option<HashMap<String, String>>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct ConfigReadMode {
-    pub hotkeys: HashMap<String, CommandConfig>,
-    pub swallow: Option<bool>,
-    pub oneoff: Option<bool>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct CommandConfig {
-    pub action_type: Option<String>,
-    pub action: String,
-    pub send: Option<bool>,
-    pub on_release: Option<bool>,
-}
-
 pub struct Config {
     pub modes: Vec<Mode>,
-    pub remaps: HashMap<KeyCode, KeyCode>,
+    pub default_mode: usize,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Mode {
     pub name: String,
     pub hotkeys: Vec<Hotkey>,
+    pub remaps: HashMap<KeyCode, KeyCode>,
     pub unbinds: Vec<KeyBinding>,
     pub options: ModeOptions,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Hotkey {
-    pub action_type: ActionType,
     pub keybind: KeyBinding,
     pub action: String,
-}
-
-#[derive(Debug, Clone, Deserialize, PartialEq)]
-pub enum ActionType {
-    Command,
-    SingleCommand,
-}
-
-impl ActionType {
-    pub fn from_str(s: &str) -> Result<Self, ()> {
-        match s {
-            "Command" | "command" => Ok(ActionType::Command),
-            "SingleCommand" | "Singlecommand" | "singlecommand" => Ok(ActionType::SingleCommand),
-            _ => Err(()),
-        }
-    }
 }
 
 impl Value for &Hotkey {
@@ -113,157 +75,271 @@ pub struct ModeOptions {
     pub oneoff: bool,
 }
 
-pub fn load(path: &Path) -> Result<Config, Error> {
-    let config_content_raw = fs::read_to_string(path).unwrap();
-    let config_new: ConfigRead = serde_json::from_str(&config_content_raw).unwrap();
-    let mut modes_to_return: Vec<Mode> = Vec::new();
-    let mut remaps_to_return: HashMap<KeyCode, KeyCode> = HashMap::new();
-    for mode in config_new.modes.iter() {
-        let mut mode_from_config = Mode {
-            name: mode.0.clone(),
-            hotkeys: vec![],
-            unbinds: vec![],
-            options: ModeOptions {
-                swallow: mode.1.swallow.unwrap_or(false),
-                oneoff: mode.1.oneoff.unwrap_or(false),
-            },
-        };
-        for (keycodes, command) in mode.1.hotkeys.iter() {
-            let mut modifiers: HashSet<KeyCode> = HashSet::new();
-            let mut keys: Vec<KeyCode> = Vec::new();
-            let mut commands: Vec<String> = Vec::new();
-            let keycodes: String = keycodes.chars().filter(|&c| c != ' ' && c != '\t').collect();
-            let objects = keycodes.split('+').collect::<Vec<_>>();
-            let action_type = match ActionType::from_str(
-                command.action_type.clone().unwrap_or("command".to_string()).as_str(),
-            ) {
-                Ok(action_type) => action_type,
-                Err(_) => {
-                    log::warn!("Failed to parce action_type for keycodes line: {keycodes:?}");
-                    continue;
-                }
-            };
-            if (objects.len() < 2 && action_type == ActionType::Command)
-                || (objects.len() != 1 && action_type == ActionType::SingleCommand)
-            {
-                log::warn!(
-                    "Invalid keycodes line, action_type \"command\" must contain >2 keycodes or choose action_type \"singlecommand\": {keycodes:?}"
-                );
-                continue;
-            }
-            match objects
-                .clone()
-                .into_iter()
-                .take(objects.len() - 1)
-                .map(KeyCode::from_str)
-                .collect::<Result<HashSet<_>, _>>()
-            {
-                Ok(tokens) => {
-                    if tokens.iter().any(|token| !ALLOWED_MODIFIERS.contains(token)) {
-                        log::warn!("Invalid modifier for keycodes line: {keycodes:?}");
-                        continue;
-                    }
-                    modifiers = tokens;
-                }
-                Err(_) => log::warn!("Failed parsing modifiers for keycodes line: {keycodes:?}"),
-            }
-            let keys_string = objects.last().unwrap();
-            if keys_string.starts_with('{') && keys_string.ends_with('}') {
-                let keys_vec_string =
-                    keys_string[1..keys_string.len() - 1].split(',').collect::<Vec<_>>();
-                for key_string in keys_vec_string {
-                    if !key_string.contains('-') {
-                        match KeyCode::from_str(key_string) {
-                            Ok(key) => keys.push(key),
-                            Err(_) => log::warn!("Failed to parse key: {key_string:?}"),
-                        }
-                        continue;
-                    }
-                    let range: Vec<&str> = key_string.split('-').collect();
-                    if range.len() != 2 {
-                        log::warn!("Invalid range for keys: {key_string:?}");
-                        continue;
-                    }
-                    let rfrom = match KeyCode::from_str(range[0]) {
-                        Ok(key) => key,
-                        Err(_) => {
-                            log::warn!("Failed to parse key: {:?}", range[0]);
-                            continue;
-                        }
-                    };
-                    let rto = match KeyCode::from_str(range[1]) {
-                        Ok(key) => key,
-                        Err(_) => {
-                            log::warn!("Failed to parse key: {:?}", range[1]);
-                            continue;
-                        }
-                    };
-                    for i in rfrom.code()..=rto.code() {
-                        keys.push(KeyCode::new(i));
+struct GeneralSettings {
+    default_mode: String,
+    oneoff: bool,
+    swallow: bool,
+}
+
+fn parse_general(doc: &kdl::KdlDocument) -> GeneralSettings {
+    let mut settings =
+        GeneralSettings { default_mode: "master".to_string(), oneoff: false, swallow: false };
+
+    let general_node = match doc.get("general") {
+        Some(node) => node,
+        None => return settings,
+    };
+
+    let children = match general_node.children() {
+        Some(children) => children,
+        None => return settings,
+    };
+
+    for node in children.nodes() {
+        let name = node.name().value();
+        match name {
+            "default" => {
+                if let Some(val) = node.get(0) {
+                    if let Some(s) = val.as_string() {
+                        settings.default_mode = s.to_string();
+                    } else {
+                        log::warn!("general.default value must be a string");
                     }
                 }
-                let pattern = format!(r"\{{([^{{}}]*?,){{{}}}[^{{}}]*?\}}", keys.len() - 1);
-                let re = regex::Regex::new(&pattern).unwrap();
-                let pattern_from_action_orig: String =
-                    re.find_iter(&command.action).map(|m| m.as_str().to_string()).collect();
-                if pattern_from_action_orig.is_empty() {
-                    log::debug!("Failed to find pattern in action: {:?}", command.action);
-                    continue;
-                }
-                let pattern_from_action_stripped =
-                    &pattern_from_action_orig[1..pattern_from_action_orig.len() - 1];
-                for element in pattern_from_action_stripped.split(',') {
-                    commands
-                        .push(command.action.clone().replace(&pattern_from_action_orig, element));
-                }
-            } else {
-                match KeyCode::from_str(keys_string) {
-                    Ok(key) => keys.push(key),
-                    Err(_) => log::warn!("Failed to parse key: {keys_string:?}"),
-                }
-                commands.push(command.action.clone());
             }
-            for i in 0..keys.len() {
-                mode_from_config.hotkeys.push(Hotkey {
-                    action_type: action_type.clone(),
-                    keybind: KeyBinding {
-                        keysym: keys[i],
-                        modifiers: modifiers.clone(),
-                        send: command.send.unwrap_or(false),
-                        on_release: command.on_release.unwrap_or(false),
-                    },
-                    action: commands[i]
-                        .clone()
-                        .strip_suffix('\n')
-                        .unwrap_or(&commands[i].clone())
-                        .to_string(),
-                });
+            "oneoff" => {
+                if let Some(val) = node.get(0) {
+                    if let Some(b) = val.as_bool() {
+                        settings.oneoff = b;
+                    } else {
+                        log::warn!("general.oneoff value must be a boolean");
+                    }
+                }
             }
-        }
-        log::debug!("before hotkeys");
-        for hotkey in mode_from_config.hotkeys.iter() {
-            log::debug!("Hotkey: {hotkey:?}");
-        }
-        log::debug!("after hotkeys");
-        modes_to_return.push(mode_from_config);
-    }
-    for (keycode_from, keycode_to) in config_new.remaps.unwrap_or_default() {
-        match (KeyCode::from_str(&keycode_from), KeyCode::from_str(&keycode_to)) {
-            (Ok(keycode_from), Ok(keycode_to)) => {
-                remaps_to_return.insert(keycode_from, keycode_to);
+            "swallow" => {
+                if let Some(val) = node.get(0) {
+                    if let Some(b) = val.as_bool() {
+                        settings.swallow = b;
+                    } else {
+                        log::warn!("general.swallow value must be a boolean");
+                    }
+                }
             }
-            (Err(_), _) => log::warn!("Failed to parse keycode_from: {keycode_from:?}"),
-            (_, Err(_)) => log::warn!("Failed to parse keycode_to: {keycode_to:?}"),
+            _ => {
+                log::warn!("Unknown general setting: {name}");
+            }
         }
     }
 
-    Ok(Config { modes: modes_to_return, remaps: remaps_to_return })
+    settings
+}
+
+fn parse_mode(mode_name: &str, mode_node: &kdl::KdlNode, general: &GeneralSettings) -> Mode {
+    let mut mode = Mode {
+        name: mode_name.to_string(),
+        hotkeys: vec![],
+        remaps: HashMap::new(),
+        unbinds: vec![],
+        options: ModeOptions { swallow: general.swallow, oneoff: general.oneoff },
+    };
+
+    let children = match mode_node.children() {
+        Some(children) => children,
+        None => return mode,
+    };
+
+    for hotkey_node in children.nodes() {
+        let keycodes_raw = hotkey_node.name().value().to_string();
+
+        let action_value = match hotkey_node.get(0) {
+            Some(val) => match val.as_string() {
+                Some(s) => s.to_string(),
+                None => {
+                    log::warn!("Action value for keycodes line must be a string: {keycodes_raw:?}");
+                    continue;
+                }
+            },
+            None => {
+                log::warn!("Missing action for keycodes line: {keycodes_raw:?}");
+                continue;
+            }
+        };
+
+        let on_release = hotkey_node.get("on_release").and_then(|v| v.as_bool()).unwrap_or(false);
+        let send = hotkey_node.get("send").and_then(|v| v.as_bool()).unwrap_or(false);
+
+        let keycodes: String = keycodes_raw.chars().filter(|&c| c != ' ' && c != '\t').collect();
+        let objects = keycodes.split('+').collect::<Vec<_>>();
+
+        if objects.len() == 1 && !objects[0].starts_with('<') {
+            let key_str = objects[0];
+            match KeyCode::from_str(key_str) {
+                Ok(from_key) => {
+                    if let Ok(to_key) = KeyCode::from_str(&action_value) {
+                        mode.remaps.insert(from_key, to_key);
+                        continue;
+                    }
+                    mode.hotkeys.push(Hotkey {
+                        keybind: KeyBinding {
+                            keysym: from_key,
+                            modifiers: HashSet::new(),
+                            send,
+                            on_release,
+                        },
+                        action: action_value
+                            .strip_suffix('\n')
+                            .unwrap_or(&action_value)
+                            .to_string(),
+                    });
+                    continue;
+                }
+                Err(_) => {
+                    log::warn!("Failed to parse key: {key_str:?}");
+                    continue;
+                }
+            }
+        }
+
+        if objects.len() < 2 {
+            log::warn!(
+                "Invalid keycodes line, multi-key bindings must contain at least 2 keys: {keycodes:?}"
+            );
+            continue;
+        }
+
+        let modifiers = match objects[..objects.len() - 1]
+            .iter()
+            .map(|s| KeyCode::from_str(s))
+            .collect::<Result<HashSet<_>, _>>()
+        {
+            Ok(tokens) => {
+                if tokens.iter().any(|token| !ALLOWED_MODIFIERS.contains(token)) {
+                    log::warn!("Invalid modifier for keycodes line: {keycodes:?}");
+                    continue;
+                }
+                tokens
+            }
+            Err(_) => {
+                log::warn!("Failed parsing modifiers for keycodes line: {keycodes:?}");
+                continue;
+            }
+        };
+
+        let keys_string = objects.last().unwrap();
+        let mut keys: Vec<KeyCode> = Vec::new();
+        let mut commands: Vec<String> = Vec::new();
+
+        if keys_string.starts_with('<') && keys_string.ends_with('>') {
+            let keys_vec_string =
+                keys_string[1..keys_string.len() - 1].split(',').collect::<Vec<_>>();
+            for key_string in &keys_vec_string {
+                if !key_string.contains('-') {
+                    match KeyCode::from_str(key_string) {
+                        Ok(key) => keys.push(key),
+                        Err(_) => log::warn!("Failed to parse key: {key_string:?}"),
+                    }
+                    continue;
+                }
+                let range: Vec<&str> = key_string.split('-').collect();
+                if range.len() != 2 {
+                    log::warn!("Invalid range for keys: {key_string:?}");
+                    continue;
+                }
+                let rfrom = match KeyCode::from_str(range[0]) {
+                    Ok(key) => key,
+                    Err(_) => {
+                        log::warn!("Failed to parse key: {:?}", range[0]);
+                        continue;
+                    }
+                };
+                let rto = match KeyCode::from_str(range[1]) {
+                    Ok(key) => key,
+                    Err(_) => {
+                        log::warn!("Failed to parse key: {:?}", range[1]);
+                        continue;
+                    }
+                };
+                for i in rfrom.code()..=rto.code() {
+                    keys.push(KeyCode::new(i));
+                }
+            }
+
+            let pattern = format!(r"\{{([^{{}}]*?,){{{}}}[^{{}}]*?\}}", keys.len() - 1);
+            let re = regex::Regex::new(&pattern).unwrap();
+            let pattern_from_action_orig: String =
+                re.find_iter(&action_value).map(|m| m.as_str().to_string()).collect();
+            if pattern_from_action_orig.is_empty() {
+                log::debug!("Failed to find pattern in action: {:?}", action_value);
+                continue;
+            }
+            let pattern_from_action_stripped =
+                &pattern_from_action_orig[1..pattern_from_action_orig.len() - 1];
+            for element in pattern_from_action_stripped.split(',') {
+                commands.push(action_value.replace(&pattern_from_action_orig, element));
+            }
+        } else {
+            match KeyCode::from_str(keys_string) {
+                Ok(key) => keys.push(key),
+                Err(_) => log::warn!("Failed to parse key: {keys_string:?}"),
+            }
+            commands.push(action_value.clone());
+        }
+
+        for i in 0..keys.len() {
+            if i >= commands.len() {
+                break;
+            }
+            mode.hotkeys.push(Hotkey {
+                keybind: KeyBinding {
+                    keysym: keys[i],
+                    modifiers: modifiers.clone(),
+                    send,
+                    on_release,
+                },
+                action: commands[i].strip_suffix('\n').unwrap_or(&commands[i]).to_string(),
+            });
+        }
+    }
+
+    log::debug!("before hotkeys");
+    for hotkey in mode.hotkeys.iter() {
+        log::debug!("Hotkey: {hotkey:?}");
+    }
+    log::debug!("after hotkeys");
+
+    mode
+}
+
+pub fn load(path: &Path) -> Result<Config, Error> {
+    let config_content_raw = fs::read_to_string(path)?;
+    let doc: kdl::KdlDocument =
+        config_content_raw.parse().map_err(|e: kdl::KdlError| Error::Parse(e.to_string()))?;
+
+    let general = parse_general(&doc);
+
+    let mut modes: Vec<Mode> = Vec::new();
+
+    for node in doc.nodes() {
+        let name = node.name().value();
+        if name == "general" {
+            continue;
+        }
+        modes.push(parse_mode(name, node, &general));
+    }
+
+    let default_mode =
+        modes.iter().position(|m| m.name == general.default_mode).ok_or_else(|| {
+            Error::Parse(format!("Default mode '{}' not found in config", general.default_mode))
+        })?;
+
+    Ok(Config { modes, default_mode })
 }
 
 #[derive(Debug)]
 pub enum Error {
     ConfigNotFound,
     Io(std::io::Error),
+    Parse(String),
 }
 
 impl From<std::io::Error> for Error {
@@ -280,8 +356,8 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Error::ConfigNotFound => "Config file not found.".fmt(f),
-
             Error::Io(io_err) => format!("I/O Error while parsing config file: {io_err}").fmt(f),
+            Error::Parse(msg) => format!("Config parse error: {msg}").fmt(f),
         }
     }
 }
@@ -289,7 +365,6 @@ impl fmt::Display for Error {
 //pub const IMPORT_STATEMENT: &str = "include";
 //pub const UNBIND_STATEMENT: &str = "ignore";
 pub const MODE_ENTER_STATEMENT: &str = "@enter";
-pub const MODE_ESCAPE_STATEMENT: &str = "@escape";
 
 pub const ALLOWED_MODIFIERS: [KeyCode; 8] = [
     evdev::KeyCode::KEY_LEFTMETA,
