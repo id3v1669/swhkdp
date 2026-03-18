@@ -74,6 +74,10 @@ struct Args {
     /// Take a list of devices to ignore from the user
     #[arg(short = 'I', long, num_args = 0.., value_delimiter = '|')]
     ignoredevices: Vec<String>,
+
+    /// Read and print keys
+    #[arg(short = 'w', long)]
+    watch: bool,
 }
 
 #[tokio::main]
@@ -95,6 +99,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let invoking_uid = env.pkexec_id;
 
     setup_swhkdp(invoking_uid, env.runtime_dir.clone().to_string_lossy().to_string());
+
+    if args.watch {
+        return run_watch_mode(&args.devices, &args.ignoredevices).await;
+    }
 
     let load_config = || {
         // Drop privileges to the invoking user.
@@ -613,5 +621,108 @@ pub fn send_command(
         log::error!("Failed to send command to swhks through IPC.");
         log::error!("Please make sure that swhks is running.");
         log::error!("Err: {e:#?}")
+    }
+}
+
+async fn run_watch_mode(
+    arg_add_devices: &[String],
+    arg_ignore_devices: &[String],
+) -> Result<(), Box<dyn Error>> {
+    let to_add =
+        |dev: &Device| arg_add_devices.contains(&dev.name().unwrap_or("[unknown]").to_string());
+    let to_ignore =
+        |dev: &Device| arg_ignore_devices.contains(&dev.name().unwrap_or("[unknown]").to_string());
+
+    let supported_devices: Vec<(PathBuf, Device)> = {
+        if arg_add_devices.is_empty() {
+            evdev::enumerate()
+                .filter(|(_, dev)| !to_ignore(dev) && check_device_is_supported(dev))
+                .collect()
+        } else {
+            evdev::enumerate().filter(|(_, dev)| !to_ignore(dev) && to_add(dev)).collect()
+        }
+    };
+
+    if supported_devices.is_empty() {
+        log::error!("No valid device was detected!");
+        exit(1);
+    }
+
+    log::debug!("Watch mode: {} device(s) detected", supported_devices.len());
+
+    let mut signals = Signals::new([SIGINT, SIGTERM, SIGQUIT])?;
+
+    let mut udev =
+        AsyncMonitorSocket::new(MonitorBuilder::new()?.match_subsystem("input")?.listen()?)?;
+
+    let mut device_stream_map = StreamMap::new();
+
+    for (path, device) in supported_devices.into_iter() {
+        let path = match path.to_str() {
+            Some(p) => p,
+            None => continue,
+        };
+        device_stream_map.insert(path.to_string(), device.into_event_stream()?);
+    }
+
+    println!("Watching for key events. Press Ctrl+C to exit.");
+
+    loop {
+        select! {
+            Some(signal) = signals.next() => {
+                match signal {
+                    SIGINT | SIGTERM | SIGQUIT => {
+                        log::debug!("Watch mode: received signal {signal:#?}, exiting...");
+                        exit(0);
+                    }
+                    _ => {}
+                }
+            }
+
+            Some(Ok(event)) = udev.next() => {
+                if !event.is_initialized() {
+                    continue;
+                }
+
+                let node = match event.devnode() {
+                    None => continue,
+                    Some(node) => match node.to_str() {
+                        None => continue,
+                        Some(node) => node,
+                    },
+                };
+
+                match event.event_type() {
+                    EventType::Add => {
+                        let device = match Device::open(node) {
+                            Err(e) => {
+                                log::error!("Could not open evdev device at {node}: {e}");
+                                continue;
+                            },
+                            Ok(device) => device
+                        };
+                        if !to_ignore(&device) && (to_add(&device) || check_device_is_supported(&device)) {
+                            let name = device.name().unwrap_or("[unknown]");
+                            log::info!("Watch mode: device '{name}' at '{node}' added.");
+                            device_stream_map.insert(node.to_string(), device.into_event_stream()?);
+                        }
+                    }
+                    EventType::Remove => {
+                        if device_stream_map.contains_key(node) {
+                            let stream = device_stream_map.remove(node).expect("device not in stream_map");
+                            let name = stream.device().name().unwrap_or("[unknown]");
+                            log::info!("Watch mode: device '{name}' at '{node}' removed");
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
+            Some((_node, Ok(event))) = device_stream_map.next() => {
+                if let EventSummary::Key(_, keycode, 1) = event.destructure() {
+                    println!("{:?}", keycode);
+                }
+            }
+        }
     }
 }

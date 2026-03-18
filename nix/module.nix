@@ -95,6 +95,7 @@ in {
         ExecStart = "${lib.getExe' cfg.package "swhks"}";
         Restart = "always";
         KillMode = "process";
+        SendSIGKILL = "no";
       };
       path = [
         "/etc/profiles/per-user/${cfg.username}"

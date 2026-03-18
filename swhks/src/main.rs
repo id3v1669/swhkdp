@@ -98,14 +98,12 @@ fn main() -> std::io::Result<()> {
         log::debug!("Previous PID: {swhks_pid}");
 
         let mut sys = System::new_with_specifics(
-            RefreshKind::nothing().with_processes(
-                ProcessRefreshKind::nothing().with_exe(UpdateKind::Always)
-            ),
+            RefreshKind::nothing()
+                .with_processes(ProcessRefreshKind::nothing().with_exe(UpdateKind::Always)),
         );
         sys.refresh_all();
         for (pid, process) in sys.processes() {
-            if pid.to_string() == swhks_pid && process.exe() == env::current_exe().ok().as_deref()
-            {
+            if pid.to_string() == swhks_pid && process.exe() == env::current_exe().ok().as_deref() {
                 log::error!("Server is already running!");
                 exit(1);
             }
