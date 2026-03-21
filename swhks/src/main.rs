@@ -1,6 +1,5 @@
 use clap::Parser;
 use environ::Env;
-use nix::libc;
 use nix::sys::stat::{Mode, umask};
 use std::io::Read;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -154,46 +153,28 @@ fn get_file_paths(env: &Env) -> (String, String) {
 }
 
 fn run_system_command(command: &str, log_path: &Path) {
-    // Double-fork with setsid to fully detach child processes.
-    // This ensures commands survive swhks restarts/stops when running under a systemd service.
-    match unsafe { nix::unistd::fork() } {
-        Ok(nix::unistd::ForkResult::Parent { child }) => {
-            let _ = nix::sys::wait::waitpid(child, None);
-        }
-        Ok(nix::unistd::ForkResult::Child) => {
-            let _ = nix::unistd::setsid();
-
-            match unsafe { nix::unistd::fork() } {
-                Ok(nix::unistd::ForkResult::Parent { .. }) => {
-                    unsafe { libc::_exit(0) };
-                }
-                Ok(nix::unistd::ForkResult::Child) => {
-                    let err = Command::new("sh")
-                        .arg("-c")
-                        .arg(command)
-                        .stdin(Stdio::null())
-                        .stdout(match OpenOptions::new().append(true).create(true).open(log_path) {
-                            Ok(f) => f,
-                            Err(_) => unsafe { libc::_exit(1) },
-                        })
-                        .stderr(match OpenOptions::new().append(true).create(true).open(log_path) {
-                            Ok(f) => f,
-                            Err(_) => unsafe { libc::_exit(1) },
-                        })
-                        .exec();
-
-                    // exec() only returns on error
-                    log::error!("Failed to exec command: {err}");
-                    unsafe { libc::_exit(1) };
-                }
-                Err(_) => {
-                    log::error!("Second fork failed for command: {command}");
-                    unsafe { libc::_exit(1) };
-                }
+    if let Err(e) = Command::new("sh")
+        .arg("-c")
+        .arg(command)
+        .stdin(Stdio::null())
+        .stdout(match OpenOptions::new().append(true).create(true).open(log_path) {
+            Ok(file) => file,
+            Err(e) => {
+                _ = Command::new("notify-send").arg(format!("ERROR {e}")).spawn();
+                exit(1);
             }
-        }
-        Err(e) => {
-            log::error!("Fork failed for command: {command}: {e}");
-        }
+        })
+        .stderr(match OpenOptions::new().append(true).create(true).open(log_path) {
+            Ok(file) => file,
+            Err(e) => {
+                _ = Command::new("notify-send").arg(format!("ERROR {e}")).spawn();
+                exit(1);
+            }
+        })
+        .process_group(0)
+        .spawn()
+    {
+        log::error!("Failed to execute {command}");
+        log::error!("Error: {e}");
     }
 }
