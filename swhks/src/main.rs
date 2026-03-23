@@ -33,10 +33,10 @@ struct Args {
 fn main() -> std::io::Result<()> {
     let args = Args::parse();
     if args.debug {
-        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("swhks=debug"))
+        env_logger::Builder::from_env(env_logger::Env::default().filter_or("RUST_LOG", "debug"))
             .init();
     } else {
-        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("swhks=warn"))
+        env_logger::Builder::from_env(env_logger::Env::default().filter_or("RUST_LOG", "warn"))
             .init();
     }
 

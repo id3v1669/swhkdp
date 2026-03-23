@@ -10,7 +10,6 @@ use signal_hook::consts::signal::*;
 use signal_hook_tokio::Signals;
 use std::{
     collections::HashMap,
-    env,
     error::Error,
     fs,
     fs::Permissions,
@@ -19,7 +18,7 @@ use std::{
     path::{Path, PathBuf},
     process::{exit, id},
 };
-use sysinfo::System;
+use sysinfo::{ProcessRefreshKind, RefreshKind, System, UpdateKind};
 use tokio::select;
 use tokio::time::Duration;
 use tokio::time::{Instant, sleep};
@@ -72,12 +71,16 @@ struct Args {
     devices: Vec<String>,
 
     /// Take a list of devices to ignore from the user
-    #[arg(short = 'I', long, num_args = 0.., value_delimiter = '|')]
-    ignoredevices: Vec<String>,
+    #[arg(short = 'I', long = "ignore-devices", num_args = 0.., value_delimiter = '|')]
+    ignore_devices: Vec<String>,
 
     /// Read and print keys
     #[arg(short = 'w', long)]
     watch: bool,
+
+    /// Verify config
+    #[arg(long = "verify-config")]
+    verify_config: bool,
 }
 
 #[tokio::main]
@@ -86,12 +89,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let default_cooldown: u64 = 250;
 
     if args.debug {
-        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("swhks=debug"))
+        env_logger::Builder::from_env(env_logger::Env::default().filter_or("RUST_LOG", "debug"))
             .init();
     } else {
-        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("swhks=warn"))
+        env_logger::Builder::from_env(env_logger::Env::default().filter_or("RUST_LOG", "warn"))
             .init();
     }
+    log::debug!("Logger initialized.");
 
     let env = environ::Env::construct();
     log::debug!("Environment Aquired");
@@ -101,7 +105,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
     setup_swhkdp(invoking_uid, env.runtime_dir.clone().to_string_lossy().to_string());
 
     if args.watch {
-        return run_watch_mode(&args.devices, &args.ignoredevices).await;
+        let mut sys = System::new_with_specifics(
+            RefreshKind::nothing()
+                .with_processes(ProcessRefreshKind::nothing().with_exe(UpdateKind::Always)),
+        );
+        sys.refresh_all();
+        for (pid, process) in sys.processes() {
+            if process.exe() == Some(&std::env::current_exe().unwrap()) {
+                log::error!("Another instance of swhkdp is already running!");
+                log::error!("pid of existing swhkdp process: {pid}");
+                exit(1);
+            }
+        }
+        return run_watch_mode(&args.devices, &args.ignore_devices).await;
     }
 
     let load_config = || {
@@ -112,9 +128,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
             args.config.as_ref().map_or_else(|| env.fetch_config_path(), |file| file.clone());
 
         log::debug!("Using config file path: {config_file_path:#?}");
-
-        // If no config is present
-        // Creates a default config at location (read man 5 swhkdp)
 
         if !Path::new(&config_file_path).exists() {
             log::warn!("No config found at path: {config_file_path:#?}");
@@ -139,7 +152,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut current_mode: usize = config.default_mode;
     let mut default_mode: usize = config.default_mode;
     let arg_add_devices = args.devices;
-    let arg_ignore_devices = args.ignoredevices;
+    let arg_ignore_devices = args.ignore_devices;
 
     let to_add =
         |dev: &Device| arg_add_devices.contains(&dev.name().unwrap_or("[unknown]").to_string());
@@ -489,11 +502,9 @@ pub fn check_device_is_supported(device: &Device) -> bool {
 }
 
 pub fn setup_swhkdp(invoking_uid: u32, runtime_path: String) {
-    // Set a sane process umask.
     log::debug!("Setting process umask.");
     umask(Mode::S_IWGRP | Mode::S_IWOTH);
 
-    // Get the runtime path and create it if needed.
     if !Path::new(&runtime_path).exists() {
         match fs::create_dir_all(Path::new(&runtime_path)) {
             Ok(_) => {
@@ -507,7 +518,6 @@ pub fn setup_swhkdp(invoking_uid: u32, runtime_path: String) {
         }
     }
 
-    // Get the PID file path for instance tracking.
     let pidfile: String = format!("{runtime_path}swhkdp_{invoking_uid}.pid");
     if Path::new(&pidfile).exists() {
         log::debug!("Reading {pidfile} file and checking for running instances.");
@@ -520,21 +530,20 @@ pub fn setup_swhkdp(invoking_uid: u32, runtime_path: String) {
         };
         log::debug!("Previous PID: {swhkdp_pid}");
 
-        // Check if swhkdp is already running!
-        let mut sys = System::new_all();
+        let mut sys = System::new_with_specifics(
+            RefreshKind::nothing()
+                .with_processes(ProcessRefreshKind::nothing().with_exe(UpdateKind::Always)),
+        );
         sys.refresh_all();
         for (pid, process) in sys.processes() {
             if pid.to_string() == swhkdp_pid
-                && process.exe() == env::current_exe().unwrap().parent()
+                && process.exe() == Some(&std::env::current_exe().unwrap())
             {
-                log::error!("swhkdp is already running!");
-                log::error!("pid of existing swhkdp process: {pid}");
-                log::error!("To close the existing swhkdp process, run `sudo killall swhkdp`");
+                log::error!("Another instance of swhkdp is already running!");
                 exit(1);
             }
         }
     }
-
     // Write to the pid file.
     match fs::write(&pidfile, id().to_string()) {
         Ok(_) => {}
