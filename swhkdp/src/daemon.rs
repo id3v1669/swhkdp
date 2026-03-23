@@ -92,10 +92,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
         env_logger::Builder::from_env(env_logger::Env::default().filter_or("RUST_LOG", "debug"))
             .init();
     } else {
-        env_logger::Builder::from_env(env_logger::Env::default().filter_or("RUST_LOG", "warn"))
-            .init();
+        env_logger::Builder::from_env(
+            env_logger::Env::default().filter_or("RUST_LOG", "warn,info"),
+        )
+        .init();
     }
     log::debug!("Logger initialized.");
+
+    if args.verify_config {
+        let config_file_path: PathBuf = args
+            .config
+            .as_ref()
+            .map_or_else(|| PathBuf::from("/etc/swhkdp/swhkdp.kdl"), |file| file.clone());
+        return run_verify_mode(&config_file_path);
+    }
 
     let env = environ::Env::construct();
     log::debug!("Environment Aquired");
@@ -630,6 +640,35 @@ pub fn send_command(
         log::error!("Failed to send command to swhks through IPC.");
         log::error!("Please make sure that swhks is running.");
         log::error!("Err: {e:#?}")
+    }
+}
+
+fn run_verify_mode(config_file_path: &Path) -> Result<(), Box<dyn Error>> {
+    if !config_file_path.exists() {
+        log::info!("Error: Config file not found at: {}", config_file_path.display());
+        exit(1);
+    }
+    match config::load(config_file_path) {
+        Ok(cfg) => {
+            log::info!("Config file is valid: {}", config_file_path.display());
+            log::info!("Modes: {}", cfg.modes.len());
+            for (i, mode) in cfg.modes.iter().enumerate() {
+                let default_marker = if i == cfg.default_mode { " (default)" } else { "" };
+                log::info!(
+                    "  - {}{}: {} hotkeys, {} remaps",
+                    mode.name,
+                    default_marker,
+                    mode.hotkeys.len(),
+                    mode.remaps.len(),
+                );
+            }
+            Ok(())
+        }
+        Err(e) => {
+            log::error!("Error: Invalid config file: {}", config_file_path.display());
+            log::error!("{e}");
+            exit(1);
+        }
     }
 }
 

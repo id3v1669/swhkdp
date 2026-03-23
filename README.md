@@ -58,7 +58,8 @@ It is not recommended to link `~/.config/swhkdp/swhkdp.kdl` to `/etc/swhkdp/swhk
 Recently feature of remaping keys was introduced and if shortcuts are stored in user-accesable directory, malicious script might remap all your keys to "none" and lock you out.
 Also in the future macros feature will be implemented, so making config file user-accesable is not a safe option by any means.
 
-**FEATURE IN DEVELOPMENT**: Not sure what key to use, launch swhkdp with -w or --what-am-i-pressing. This will launch swhkdp without a config and output in cli key you are pressing
+### Not sure what key to use? 
+launch swhkdp with -w or --watch. This will launch swhkdp without a config and output in cli key you are pressing.
 
 ## Security
 
