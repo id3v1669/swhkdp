@@ -98,6 +98,7 @@ in {
         SendSIGKILL = "no";
       };
       path = [
+        "/run/wrappers"
         "/etc/profiles/per-user/${cfg.username}"
         "/run/current-system/sw"
       ];
