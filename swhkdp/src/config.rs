@@ -134,6 +134,10 @@ fn parse_general(doc: &kdl::KdlDocument) -> GeneralSettings {
     settings
 }
 
+fn action_has_empty_segment(action: &str) -> bool {
+    action.contains('@') && action.split("&&").map(str::trim).any(str::is_empty)
+}
+
 fn parse_mode(mode_name: &str, mode_node: &kdl::KdlNode, general: &GeneralSettings) -> Mode {
     let mut mode = Mode {
         name: mode_name.to_string(),
@@ -179,6 +183,14 @@ fn parse_mode(mode_name: &str, mode_node: &kdl::KdlNode, general: &GeneralSettin
                         mode.remaps.insert(from_key, to_key);
                         continue;
                     }
+                    let action =
+                        action_value.strip_suffix('\n').unwrap_or(&action_value).to_string();
+                    if action_has_empty_segment(&action) {
+                        log::warn!(
+                            "Skipping hotkey '{keycodes_raw}': action has empty '&&' segment: {action:?}"
+                        );
+                        continue;
+                    }
                     mode.hotkeys.push(Hotkey {
                         keybind: KeyBinding {
                             keysym: from_key,
@@ -186,10 +198,7 @@ fn parse_mode(mode_name: &str, mode_node: &kdl::KdlNode, general: &GeneralSettin
                             send,
                             on_release,
                         },
-                        action: action_value
-                            .strip_suffix('\n')
-                            .unwrap_or(&action_value)
-                            .to_string(),
+                        action,
                     });
                     continue;
                 }
@@ -289,6 +298,13 @@ fn parse_mode(mode_name: &str, mode_node: &kdl::KdlNode, general: &GeneralSettin
             if i >= commands.len() {
                 break;
             }
+            let action = commands[i].strip_suffix('\n').unwrap_or(&commands[i]).to_string();
+            if action_has_empty_segment(&action) {
+                log::warn!(
+                    "Skipping hotkey '{keycodes_raw}': action has empty '&&' segment: {action:?}"
+                );
+                continue;
+            }
             mode.hotkeys.push(Hotkey {
                 keybind: KeyBinding {
                     keysym: keys[i],
@@ -296,7 +312,7 @@ fn parse_mode(mode_name: &str, mode_node: &kdl::KdlNode, general: &GeneralSettin
                     send,
                     on_release,
                 },
-                action: commands[i].strip_suffix('\n').unwrap_or(&commands[i]).to_string(),
+                action,
             });
         }
     }

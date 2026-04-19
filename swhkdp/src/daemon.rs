@@ -112,7 +112,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let invoking_uid = env.pkexec_id;
 
-    setup_swhkdp(invoking_uid, env.runtime_dir.clone().to_string_lossy().to_string());
+    setup_swhkdp(env.runtime_dir.clone().to_string_lossy().to_string());
 
     if args.watch {
         let mut sys = System::new_with_specifics(
@@ -512,7 +512,7 @@ pub fn check_device_is_supported(device: &Device) -> bool {
     }
 }
 
-pub fn setup_swhkdp(invoking_uid: u32, runtime_path: String) {
+pub fn setup_swhkdp(runtime_path: String) {
     log::debug!("Setting process umask.");
     umask(Mode::S_IWGRP | Mode::S_IWOTH);
 
