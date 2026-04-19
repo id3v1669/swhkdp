@@ -529,7 +529,7 @@ pub fn setup_swhkdp(invoking_uid: u32, runtime_path: String) {
         }
     }
 
-    let pidfile: String = format!("{runtime_path}swhkdp_{invoking_uid}.pid");
+    let pidfile: String = format!("{runtime_path}/swhkdp.pid");
     if Path::new(&pidfile).exists() {
         log::debug!("Reading {pidfile} file and checking for running instances.");
         let swhkdp_pid = match fs::read_to_string(&pidfile) {
