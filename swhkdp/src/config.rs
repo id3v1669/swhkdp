@@ -273,8 +273,18 @@ fn parse_mode(mode_name: &str, mode_node: &kdl::KdlNode, general: &GeneralSettin
                 }
             }
 
+            if keys.is_empty() {
+                log::warn!("No valid keys parsed for multi-key binding: {keycodes_raw:?}");
+                continue;
+            }
             let pattern = format!(r"\{{([^{{}}]*?,){{{}}}[^{{}}]*?\}}", keys.len() - 1);
-            let re = regex::Regex::new(&pattern).unwrap();
+            let re = match regex::Regex::new(&pattern) {
+                Ok(re) => re,
+                Err(e) => {
+                    log::warn!("Failed to build key expansion regex for '{keycodes_raw}': {e}");
+                    continue;
+                }
+            };
             let pattern_from_action_orig: String =
                 re.find_iter(&action_value).map(|m| m.as_str().to_string()).collect();
             if pattern_from_action_orig.is_empty() {

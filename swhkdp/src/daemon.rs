@@ -503,11 +503,11 @@ pub fn check_device_is_supported(device: &Device) -> bool {
         if device.name() == Some("swhkdp virtual output") {
             return false;
         }
-        log::debug!("Device: {}", device.name().unwrap(),);
+        log::debug!("Device: {}", device.name().unwrap_or("Unknown device name"),);
         log::debug!("Supported Events: {:?}", device.supported_events());
         true
     } else {
-        log::debug!("Other: {}", device.name().unwrap(),);
+        log::debug!("Other: {}", device.name().unwrap_or("Unknown device name"),);
         false
     }
 }
