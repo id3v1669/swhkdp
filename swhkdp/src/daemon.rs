@@ -14,11 +14,13 @@ use std::{
     fs,
     fs::Permissions,
     io::prelude::*,
-    os::unix::{fs::PermissionsExt, net::UnixStream},
+    os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
     process::{exit, id},
 };
-use sysinfo::{ProcessRefreshKind, RefreshKind, System, UpdateKind};
+use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, RefreshKind, System, UpdateKind};
+use tokio::io::AsyncWriteExt;
+use tokio::net::UnixStream;
 use tokio::select;
 use tokio::time::Duration;
 use tokio::time::{Instant, sleep};
@@ -32,6 +34,7 @@ mod uinput;
 
 struct DeviceState {
     state_modifiers: AttributeSet<KeyCode>,
+    state_modifiers_count: usize,
     state_keysyms: AttributeSet<KeyCode>,
     hi_res_wheel: bool,
 }
@@ -44,6 +47,7 @@ impl DeviceState {
 
         DeviceState {
             state_modifiers: AttributeSet::new(),
+            state_modifiers_count: 0,
             state_keysyms: AttributeSet::new(),
             hi_res_wheel,
         }
@@ -119,7 +123,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
             RefreshKind::nothing()
                 .with_processes(ProcessRefreshKind::nothing().with_exe(UpdateKind::Always)),
         );
-        sys.refresh_all();
+        sys.refresh_processes_specifics(
+            ProcessesToUpdate::All,
+            true,
+            ProcessRefreshKind::nothing().with_exe(UpdateKind::Always),
+        );
         let current_pid = id();
         let current_exe = std::env::current_exe().unwrap();
         for (pid, process) in sys.processes() {
@@ -256,7 +264,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 if hotkey.keybind.on_release {
                     continue;
                 }
-                send_command(hotkey.clone(), &socket_file_path, &modes, &mut current_mode, default_mode);
+                send_command(hotkey.clone(), &socket_file_path, &modes, &mut current_mode, default_mode).await;
                 hotkey_repeat_timer.as_mut().reset(Instant::now() + Duration::from_millis(repeat_cooldown_duration));
             }
 
@@ -264,15 +272,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 match signal {
                     SIGUSR1 => {
                         execution_is_paused = true;
-                        for mut device in evdev::enumerate().map(|(_, device)| device).filter(check_device_is_supported) {
-                            let _ = device.ungrab();
+                        for stream in device_stream_map.values_mut() {
+                            let _ = stream.device_mut().ungrab();
                         }
                     }
 
                     SIGUSR2 => {
                         execution_is_paused = false;
-                        for mut device in evdev::enumerate().map(|(_, device)| device).filter(check_device_is_supported) {
-                            let _ = device.grab();
+                        for stream in device_stream_map.values_mut() {
+                            let _ = stream.device_mut().grab();
                         }
                     }
 
@@ -284,18 +292,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     }
 
                     SIGINT => {
-                        for mut device in evdev::enumerate().map(|(_, device)| device).filter(check_device_is_supported) {
-                            let _ = device.ungrab();
+                        for stream in device_stream_map.values_mut() {
+                            let _ = stream.device_mut().ungrab();
                         }
                         log::warn!("Received SIGINT signal, exiting...");
                         exit(1);
                     }
 
                     _ => {
-                        for mut device in evdev::enumerate().map(|(_, device)| device).filter(check_device_is_supported) {
-                            let _ = device.ungrab();
+                        for stream in device_stream_map.values_mut() {
+                            let _ = stream.device_mut().ungrab();
                         }
-
                         log::warn!("Received signal: {signal:#?}");
                         log::warn!("Exiting...");
                         exit(1);
@@ -393,6 +400,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     1 => {
                         if config::ALLOWED_MODIFIERS.contains(&key) {
                             device_state.state_modifiers.insert(key);
+                            device_state.state_modifiers_count += 1;
                         } else {
                             device_state.state_keysyms.insert(key);
                         }
@@ -402,14 +410,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     0 => {
                         if last_hotkey.is_some() && pending_release {
                             pending_release = false;
-                            send_command(last_hotkey.clone().unwrap(), &socket_file_path, &modes, &mut current_mode, default_mode);
+                            send_command(last_hotkey.clone().unwrap(), &socket_file_path, &modes, &mut current_mode, default_mode).await;
                             last_hotkey = None;
                         }
                         if config::ALLOWED_MODIFIERS.contains(&key) {
                             if let Some(hotkey) = &last_hotkey && hotkey.modifiers().contains(&key) {
                                     last_hotkey = None;
                             }
-                            device_state.state_modifiers.remove(key);
+                            if device_state.state_modifiers.contains(key) {
+                                device_state.state_modifiers.remove(key);
+                                device_state.state_modifiers_count -= 1;
+                            }
                         } else if device_state.state_keysyms.contains(key) {
                             if let Some(hotkey) = &last_hotkey && key == hotkey.keysym() {
                                     last_hotkey = None;
@@ -422,7 +433,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 }
 
                 let possible_hotkeys: Vec<&config::Hotkey> = modes[current_mode].hotkeys.iter()
-                    .filter(|hotkey| hotkey.modifiers().len() == device_state.state_modifiers.iter().count())
+                    .filter(|hotkey| hotkey.modifiers().len() == device_state.state_modifiers_count)
                     .collect();
 
                 let event_in_hotkeys = modes[current_mode].hotkeys.iter().any(|hotkey| {
@@ -430,7 +441,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         (device_state.state_modifiers
                         .iter()
                         .all(|x| hotkey.modifiers().contains(&x)) &&
-                    device_state.state_modifiers.iter().len() == hotkey.modifiers().len())
+                    device_state.state_modifiers_count == hotkey.modifiers().len())
                     && !hotkey.is_send()
                         });
 
@@ -451,7 +462,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 for hotkey in possible_hotkeys {
                     // this should check if state_modifiers and hotkey.modifiers have the same elements
                     if (device_state.state_modifiers.iter().all(|x| hotkey.modifiers().contains(&x))
-                        && device_state.state_modifiers.iter().len() == hotkey.modifiers().len())
+                        && device_state.state_modifiers_count == hotkey.modifiers().len())
                         && device_state.state_keysyms.contains(hotkey.keysym())
                     {
                         last_hotkey = Some(hotkey.clone());
@@ -460,7 +471,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             pending_release = true;
                             break;
                         }
-                        send_command(hotkey.clone(), &socket_file_path, &modes, &mut current_mode, default_mode);
+                        send_command(hotkey.clone(), &socket_file_path, &modes, &mut current_mode, default_mode).await;
                         hotkey_repeat_timer.as_mut().reset(Instant::now() + Duration::from_millis(repeat_cooldown_duration));
                         continue;
                     }
@@ -470,9 +481,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 }
 
-fn socket_write(command: &str, socket_path: PathBuf) -> Result<(), Box<dyn Error>> {
-    let mut stream = UnixStream::connect(socket_path)?;
-    stream.write_all(command.as_bytes())?;
+async fn socket_write(command: &str, socket_path: PathBuf) -> Result<(), Box<dyn Error>> {
+    let mut stream = UnixStream::connect(socket_path).await?;
+    stream.write_all(command.as_bytes()).await?;
     Ok(())
 }
 
@@ -545,7 +556,11 @@ pub fn setup_swhkdp(runtime_path: String) {
             RefreshKind::nothing()
                 .with_processes(ProcessRefreshKind::nothing().with_exe(UpdateKind::Always)),
         );
-        sys.refresh_all();
+        sys.refresh_processes_specifics(
+            ProcessesToUpdate::All,
+            true,
+            ProcessRefreshKind::nothing().with_exe(UpdateKind::Always),
+        );
         for (pid, process) in sys.processes() {
             if pid.to_string() == swhkdp_pid
                 && process.exe() == Some(&std::env::current_exe().unwrap())
@@ -585,7 +600,7 @@ pub fn create_default_config(invoking_uid: u32, config_file_path: &PathBuf) {
     perms::drop_privileges(invoking_uid);
 }
 
-pub fn send_command(
+pub async fn send_command(
     hotkey: Hotkey,
     socket_path: &Path,
     modes: &[config::Mode],
@@ -634,7 +649,7 @@ pub fn send_command(
         commands_to_send = commands_to_send.strip_suffix(" &&").unwrap().to_string();
     }
     if !commands_to_send.is_empty()
-        && let Err(e) = socket_write(&commands_to_send, socket_path.to_path_buf())
+        && let Err(e) = socket_write(&commands_to_send, socket_path.to_path_buf()).await
     {
         log::error!("Failed to send command to swhks through IPC.");
         log::error!("Please make sure that swhks is running.");

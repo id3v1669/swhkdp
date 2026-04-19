@@ -13,7 +13,7 @@ use std::{
     path::{Path, PathBuf},
     process::{Command, Stdio, exit, id},
 };
-use sysinfo::{ProcessRefreshKind, RefreshKind, System, UpdateKind};
+use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, RefreshKind, System, UpdateKind};
 
 mod environ;
 
@@ -100,7 +100,11 @@ fn main() -> std::io::Result<()> {
             RefreshKind::nothing()
                 .with_processes(ProcessRefreshKind::nothing().with_exe(UpdateKind::Always)),
         );
-        sys.refresh_all();
+        sys.refresh_processes_specifics(
+            ProcessesToUpdate::All,
+            true,
+            ProcessRefreshKind::nothing().with_exe(UpdateKind::Always),
+        );
         for (pid, process) in sys.processes() {
             if pid.to_string() == swhks_pid && process.exe() == env::current_exe().ok().as_deref() {
                 log::error!("Server is already running!");
@@ -153,24 +157,26 @@ fn get_file_paths(env: &Env) -> (String, String) {
 }
 
 fn run_system_command(command: &str, log_path: &Path) {
+    let log_file = match OpenOptions::new().append(true).create(true).open(log_path) {
+        Ok(file) => file,
+        Err(e) => {
+            _ = Command::new("notify-send").arg(format!("ERROR {e}")).spawn();
+            exit(1);
+        }
+    };
+    let log_file_stderr = match log_file.try_clone() {
+        Ok(file) => file,
+        Err(e) => {
+            _ = Command::new("notify-send").arg(format!("ERROR {e}")).spawn();
+            exit(1);
+        }
+    };
     if let Err(e) = Command::new("sh")
         .arg("-c")
         .arg(command)
         .stdin(Stdio::null())
-        .stdout(match OpenOptions::new().append(true).create(true).open(log_path) {
-            Ok(file) => file,
-            Err(e) => {
-                _ = Command::new("notify-send").arg(format!("ERROR {e}")).spawn();
-                exit(1);
-            }
-        })
-        .stderr(match OpenOptions::new().append(true).create(true).open(log_path) {
-            Ok(file) => file,
-            Err(e) => {
-                _ = Command::new("notify-send").arg(format!("ERROR {e}")).spawn();
-                exit(1);
-            }
-        })
+        .stdout(log_file)
+        .stderr(log_file_stderr)
         .process_group(0)
         .spawn()
     {
