@@ -116,7 +116,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let invoking_uid = env.pkexec_id;
 
-    setup_swhkdp(env.runtime_dir.clone().to_string_lossy().to_string());
+    setup_swhkdp(&env.runtime_dir);
 
     if args.watch {
         let mut sys = System::new_with_specifics(
@@ -523,15 +523,15 @@ pub fn check_device_is_supported(device: &Device) -> bool {
     }
 }
 
-pub fn setup_swhkdp(runtime_path: String) {
+pub fn setup_swhkdp(runtime_path: &Path) {
     log::debug!("Setting process umask.");
     umask(Mode::S_IWGRP | Mode::S_IWOTH);
 
-    if !Path::new(&runtime_path).exists() {
-        match fs::create_dir_all(Path::new(&runtime_path)) {
+    if !runtime_path.exists() {
+        match fs::create_dir_all(runtime_path) {
             Ok(_) => {
                 log::debug!("Created runtime directory.");
-                match fs::set_permissions(Path::new(&runtime_path), Permissions::from_mode(0o600)) {
+                match fs::set_permissions(runtime_path, Permissions::from_mode(0o600)) {
                     Ok(_) => log::debug!("Set runtime directory to readonly."),
                     Err(e) => log::error!("Failed to set runtime directory to readonly: {e}"),
                 }
@@ -540,9 +540,9 @@ pub fn setup_swhkdp(runtime_path: String) {
         }
     }
 
-    let pidfile: String = format!("{runtime_path}/swhkdp.pid");
-    if Path::new(&pidfile).exists() {
-        log::debug!("Reading {pidfile} file and checking for running instances.");
+    let pidfile = runtime_path.join("swhkdp.pid");
+    if pidfile.exists() {
+        log::debug!("Reading {} file and checking for running instances.", pidfile.display());
         let swhkdp_pid = match fs::read_to_string(&pidfile) {
             Ok(swhkdp_pid) => swhkdp_pid,
             Err(e) => {
@@ -574,7 +574,7 @@ pub fn setup_swhkdp(runtime_path: String) {
     match fs::write(&pidfile, id().to_string()) {
         Ok(_) => {}
         Err(e) => {
-            log::error!("Unable to write to {pidfile}: {e}");
+            log::error!("Unable to write to {}: {e}", pidfile.display());
             exit(1);
         }
     }
@@ -583,7 +583,7 @@ pub fn setup_swhkdp(runtime_path: String) {
     check_input_group();
 }
 
-pub fn create_default_config(invoking_uid: u32, config_file_path: &PathBuf) {
+pub fn create_default_config(invoking_uid: u32, config_file_path: &Path) {
     // Initializes a default swhkdp config at specific config path
 
     perms::raise_privileges();
