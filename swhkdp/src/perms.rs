@@ -1,4 +1,5 @@
 use nix::unistd::{Gid, Uid, User};
+use std::ffi::CString;
 use std::process::exit;
 
 pub fn drop_privileges(user_uid: u32) {
@@ -20,7 +21,8 @@ pub fn raise_privileges() {
 
 fn set_initgroups(user: &nix::unistd::User, gid: u32) {
     let gid = Gid::from_raw(gid);
-    match nix::unistd::initgroups(&user.gecos, gid) {
+    let username = CString::new(user.name.as_bytes()).unwrap();
+    match nix::unistd::initgroups(&username, gid) {
         Ok(_) => log::debug!("Setting initgroups..."),
         Err(e) => {
             log::error!("Failed to set init groups: {e:#?}");
