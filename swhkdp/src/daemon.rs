@@ -120,8 +120,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .with_processes(ProcessRefreshKind::nothing().with_exe(UpdateKind::Always)),
         );
         sys.refresh_all();
+        let current_pid = id();
+        let current_exe = std::env::current_exe().unwrap();
         for (pid, process) in sys.processes() {
-            if process.exe() == Some(&std::env::current_exe().unwrap()) {
+            if pid.as_u32() != current_pid && process.exe() == Some(&current_exe) {
                 log::error!("Another instance of swhkdp is already running!");
                 log::error!("pid of existing swhkdp process: {pid}");
                 exit(1);
@@ -474,7 +476,7 @@ fn socket_write(command: &str, socket_path: PathBuf) -> Result<(), Box<dyn Error
     Ok(())
 }
 
-pub fn check_input_group() -> Result<(), Box<dyn Error>> {
+pub fn check_input_group() {
     if !Uid::current().is_root() {
         let groups = nix::unistd::getgroups();
         for groups in groups.iter() {
@@ -490,7 +492,6 @@ pub fn check_input_group() -> Result<(), Box<dyn Error>> {
         exit(1);
     } else {
         log::warn!("Running swhkdp as root!");
-        Ok(())
     }
 }
 
@@ -564,9 +565,7 @@ pub fn setup_swhkdp(invoking_uid: u32, runtime_path: String) {
     }
 
     // Check if the user is in input group.
-    if check_input_group().is_err() {
-        exit(1);
-    }
+    check_input_group();
 }
 
 pub fn create_default_config(invoking_uid: u32, config_file_path: &PathBuf) {
