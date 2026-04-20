@@ -12,6 +12,7 @@ use std::{
     os::unix::process::CommandExt,
     path::{Path, PathBuf},
     process::{Command, Stdio, exit, id},
+    thread,
 };
 use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, RefreshKind, System, UpdateKind};
 
@@ -171,7 +172,7 @@ fn run_system_command(command: &str, log_path: &Path) {
             exit(1);
         }
     };
-    if let Err(e) = Command::new("sh")
+    match Command::new("sh")
         .arg("-c")
         .arg(command)
         .stdin(Stdio::null())
@@ -180,7 +181,14 @@ fn run_system_command(command: &str, log_path: &Path) {
         .process_group(0)
         .spawn()
     {
-        log::error!("Failed to execute {command}");
-        log::error!("Error: {e}");
+        Ok(mut child) => {
+            thread::spawn(move || {
+                let _ = child.wait();
+            });
+        }
+        Err(e) => {
+            log::error!("Failed to execute {command}");
+            log::error!("Error: {e}");
+        }
     }
 }
