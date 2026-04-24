@@ -17,11 +17,14 @@ use std::{
     os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
     process::{exit, id},
+    sync::Arc,
+    sync::atomic::{AtomicBool, Ordering},
 };
 use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, RefreshKind, System, UpdateKind};
 use tokio::io::AsyncWriteExt;
 use tokio::net::UnixStream;
 use tokio::select;
+use tokio::sync::Mutex;
 use tokio::time::Duration;
 use tokio::time::{Instant, sleep};
 use tokio_stream::{StreamExt, StreamMap};
@@ -29,8 +32,15 @@ use tokio_udev::{AsyncMonitorSocket, EventType, MonitorBuilder};
 
 mod config;
 mod environ;
+mod macro_runner;
 mod perms;
 mod uinput;
+
+struct MacroState {
+    stop: Arc<AtomicBool>,
+    handle: tokio::task::JoinHandle<()>,
+    macro_type: config::MacroType,
+}
 
 struct DeviceState {
     state_modifiers: AttributeSet<KeyCode>,
@@ -119,22 +129,36 @@ async fn main() -> Result<(), Box<dyn Error>> {
     setup_swhkdp(&env.runtime_dir);
 
     if args.watch {
-        let mut sys = System::new_with_specifics(
-            RefreshKind::nothing()
-                .with_processes(ProcessRefreshKind::nothing().with_exe(UpdateKind::Always)),
-        );
-        sys.refresh_processes_specifics(
-            ProcessesToUpdate::All,
-            true,
-            ProcessRefreshKind::nothing().with_exe(UpdateKind::Always),
-        );
-        let current_pid = id();
-        let current_exe = std::env::current_exe().unwrap();
-        for (pid, process) in sys.processes() {
-            if pid.as_u32() != current_pid && process.exe() == Some(&current_exe) {
-                log::error!("Another instance of swhkdp is already running!");
-                log::error!("pid of existing swhkdp process: {pid}");
-                exit(1);
+        let runtime_dir = env.runtime_dir;
+        let pidfile = runtime_dir.join("swhkdp.pid");
+        if pidfile.exists() {
+            if let Ok(swhkdp_pid_str) = fs::read_to_string(&pidfile) {
+                let swhkdp_pid = swhkdp_pid_str.trim();
+                if !swhkdp_pid.is_empty() {
+                    if let Ok(pid) = swhkdp_pid.parse::<u32>() {
+                        let mut sys =
+                            System::new_with_specifics(RefreshKind::nothing().with_processes(
+                                ProcessRefreshKind::nothing().with_exe(UpdateKind::Always),
+                            ));
+                        sys.refresh_processes_specifics(
+                            ProcessesToUpdate::All,
+                            true,
+                            ProcessRefreshKind::nothing().with_exe(UpdateKind::Always),
+                        );
+                        let current_pid = id();
+                        let current_exe = std::env::current_exe().unwrap();
+                        for (p, process) in sys.processes() {
+                            if p.as_u32() != current_pid
+                                && p.as_u32() == pid
+                                && process.exe() == Some(&current_exe)
+                            {
+                                log::error!("Another instance of swhkdp is already running!");
+                                log::error!("pid of existing swhkdp process: {p}");
+                                exit(1);
+                            }
+                        }
+                    }
+                }
             }
         }
         return run_watch_mode(&args.devices, &args.ignore_devices).await;
@@ -207,13 +231,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // prevents some libraries to listen to these events. The easy fix is to have separate
     // virtual devices, one for keys and relative axes (`uinput_device`) and another one
     // just for switches (`uinput_switches_device`).
-    let mut uinput_device = match uinput::create_uinput_device() {
+    let uinput_device = Arc::new(Mutex::new(match uinput::create_uinput_device() {
         Ok(dev) => dev,
         Err(e) => {
             log::error!("Failed to create uinput device: {e:#?}");
             exit(1);
         }
-    };
+    }));
 
     let mut uinput_switches_device = match uinput::create_uinput_switches_device() {
         Ok(dev) => dev,
@@ -236,6 +260,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut execution_is_paused = false;
     let mut last_hotkey: Option<config::Hotkey> = None;
     let mut pending_release: bool = false;
+    let mut active_macro: Option<MacroState> = None;
     let mut device_states = HashMap::new();
     let mut device_stream_map = StreamMap::new();
 
@@ -264,7 +289,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 if hotkey.keybind.on_release {
                     continue;
                 }
-                send_command(hotkey.clone(), &socket_file_path, &modes, &mut current_mode, default_mode).await;
+                dispatch_hotkey(hotkey.clone(), &socket_file_path, &modes, &mut current_mode, default_mode, uinput_device.clone(), &mut active_macro).await;
                 hotkey_repeat_timer.as_mut().reset(Instant::now() + Duration::from_millis(repeat_cooldown_duration));
             }
 
@@ -357,6 +382,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
 
             Some((node, Ok(mut event))) = device_stream_map.next() => {
+                if let Some(ref state) = active_macro {
+                    if state.handle.is_finished() {
+                        active_macro = None;
+                    }
+                }
+
                 let device_state = &mut device_states.get_mut(&node).expect("device not in states map");
                 let key = match event.destructure() {
                     EventSummary::Key(_, keycode, _) => {
@@ -376,20 +407,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         match rlcode {
                             evdev::RelativeAxisCode::REL_WHEEL_HI_RES => {
                                 if device_state.hi_res_wheel {
-                                    uinput_device.emit(&[event]).unwrap();
+                                    uinput_device.lock().await.emit(&[event]).unwrap();
                                 }
                             }
                             evdev::RelativeAxisCode::REL_WHEEL => {
                                 if !device_state.hi_res_wheel {
-                                    uinput_device.emit(&[event]).unwrap();
+                                    uinput_device.lock().await.emit(&[event]).unwrap();
                                 }
                             }
-                            _ => uinput_device.emit(&[event]).unwrap(),
+                            _ => uinput_device.lock().await.emit(&[event]).unwrap(),
                         }
                         continue
                     }
                     _ => {
-                        uinput_device.emit(&[event]).unwrap();
+                        uinput_device.lock().await.emit(&[event]).unwrap();
                         continue
                     }
                 };
@@ -398,6 +429,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 match event.value() {
                     // Key press
                     1 => {
+                        if let Some(ref state) = active_macro {
+                            if matches!(state.macro_type, config::MacroType::Endless)
+                                && key == KeyCode::KEY_ESC
+                            {
+                                state.stop.store(true, Ordering::Relaxed);
+                                continue;
+                            }
+                        }
                         if config::ALLOWED_MODIFIERS.contains(&key) {
                             device_state.state_modifiers.insert(key);
                             device_state.state_modifiers_count += 1;
@@ -410,7 +449,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     0 => {
                         if last_hotkey.is_some() && pending_release {
                             pending_release = false;
-                            send_command(last_hotkey.clone().unwrap(), &socket_file_path, &modes, &mut current_mode, default_mode).await;
+                            dispatch_hotkey(last_hotkey.clone().unwrap(), &socket_file_path, &modes, &mut current_mode, default_mode, uinput_device.clone(), &mut active_macro).await;
                             last_hotkey = None;
                         }
                         if config::ALLOWED_MODIFIERS.contains(&key) {
@@ -449,10 +488,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 if !modes[current_mode].options.swallow
                 // Don't emit event to virtual device if it's from a valid hotkey
                 && !event_in_hotkeys {
-                    uinput_device.emit(&[event]).unwrap();
+                    uinput_device.lock().await.emit(&[event]).unwrap();
                 }
 
-                if execution_is_paused || possible_hotkeys.is_empty() || last_hotkey.is_some() {
+                if execution_is_paused || possible_hotkeys.is_empty() || last_hotkey.is_some() || active_macro.is_some() {
                     continue;
                 }
 
@@ -471,7 +510,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             pending_release = true;
                             break;
                         }
-                        send_command(hotkey.clone(), &socket_file_path, &modes, &mut current_mode, default_mode).await;
+                        dispatch_hotkey(hotkey.clone(), &socket_file_path, &modes, &mut current_mode, default_mode, uinput_device.clone(), &mut active_macro).await;
                         hotkey_repeat_timer.as_mut().reset(Instant::now() + Duration::from_millis(repeat_cooldown_duration));
                         continue;
                     }
@@ -570,7 +609,6 @@ pub fn setup_swhkdp(runtime_path: &Path) {
             }
         }
     }
-    // Write to the pid file.
     match fs::write(&pidfile, id().to_string()) {
         Ok(_) => {}
         Err(e) => {
@@ -579,13 +617,10 @@ pub fn setup_swhkdp(runtime_path: &Path) {
         }
     }
 
-    // Check if the user is in input group.
     check_input_group();
 }
 
 pub fn create_default_config(invoking_uid: u32, config_file_path: &Path) {
-    // Initializes a default swhkdp config at specific config path
-
     perms::raise_privileges();
     match fs::File::create(config_file_path) {
         Ok(mut file) => {
@@ -600,60 +635,89 @@ pub fn create_default_config(invoking_uid: u32, config_file_path: &Path) {
     perms::drop_privileges(invoking_uid);
 }
 
-pub async fn send_command(
+async fn dispatch_hotkey(
     hotkey: Hotkey,
     socket_path: &Path,
     modes: &[config::Mode],
     current_mode: &mut usize,
     default_mode: usize,
+    uinput: Arc<Mutex<evdev::uinput::VirtualDevice>>,
+    active_macro: &mut Option<MacroState>,
 ) {
     log::info!("Hotkey pressed: {hotkey:#?}");
-    let command = hotkey.action;
-    let mut commands_to_send = String::new();
     if modes[*current_mode].options.oneoff {
         *current_mode = default_mode;
     }
-    if command.contains('@') {
-        let commands = command.split("&&").map(|s| s.trim()).collect::<Vec<_>>();
-        for cmd in commands {
-            let mut words = cmd.split_whitespace();
-            match words.next().unwrap() {
-                config::MODE_ENTER_STATEMENT => {
-                    let enter_mode = cmd.split(' ').nth(1).unwrap();
-                    if enter_mode == "default" {
-                        *current_mode = default_mode;
-                        log::info!("Switching to default mode: {}", modes[*current_mode].name);
-                    } else {
-                        let mut found = false;
-                        for (i, mode) in modes.iter().enumerate() {
-                            if mode.name == enter_mode {
-                                *current_mode = i;
-                                found = true;
-                                break;
+    match hotkey.action {
+        config::HotkeyAction::Shell(command) => {
+            let mut commands_to_send = String::new();
+            if command.contains('@') {
+                let commands = command.split("&&").map(|s| s.trim()).collect::<Vec<_>>();
+                for cmd in commands {
+                    let mut words = cmd.split_whitespace();
+                    match words.next().unwrap() {
+                        config::MODE_ENTER_STATEMENT => {
+                            let enter_mode = cmd.split(' ').nth(1).unwrap();
+                            if enter_mode == "default" {
+                                *current_mode = default_mode;
+                                log::info!(
+                                    "Switching to default mode: {}",
+                                    modes[*current_mode].name
+                                );
+                            } else {
+                                let mut found = false;
+                                for (i, mode) in modes.iter().enumerate() {
+                                    if mode.name == enter_mode {
+                                        *current_mode = i;
+                                        found = true;
+                                        break;
+                                    }
+                                }
+                                if found {
+                                    log::info!("Switching to mode: {}", modes[*current_mode].name);
+                                } else {
+                                    log::warn!("Mode not found: {enter_mode}");
+                                }
                             }
                         }
-                        if found {
-                            log::info!("Switching to mode: {}", modes[*current_mode].name);
-                        } else {
-                            log::warn!("Mode not found: {enter_mode}");
-                        }
+                        _ => commands_to_send.push_str(format!("{cmd} &&").as_str()),
                     }
                 }
-                _ => commands_to_send.push_str(format!("{cmd} &&").as_str()),
+            } else {
+                commands_to_send = command.to_string();
+            }
+            if commands_to_send.ends_with(" &&") {
+                commands_to_send = commands_to_send.strip_suffix(" &&").unwrap().to_string();
+            }
+            if !commands_to_send.is_empty()
+                && let Err(e) = socket_write(&commands_to_send, socket_path.to_path_buf()).await
+            {
+                log::error!("Failed to send command to swhks through IPC.");
+                log::error!("Please make sure that swhks is running.");
+                log::error!("Err: {e:#?}")
             }
         }
-    } else {
-        commands_to_send = command.to_string();
-    }
-    if commands_to_send.ends_with(" &&") {
-        commands_to_send = commands_to_send.strip_suffix(" &&").unwrap().to_string();
-    }
-    if !commands_to_send.is_empty()
-        && let Err(e) = socket_write(&commands_to_send, socket_path.to_path_buf()).await
-    {
-        log::error!("Failed to send command to swhks through IPC.");
-        log::error!("Please make sure that swhks is running.");
-        log::error!("Err: {e:#?}")
+
+        config::HotkeyAction::Macro(macro_def) => {
+            if let Some(state) = active_macro.as_ref() {
+                state.stop.store(true, Ordering::Relaxed);
+            }
+
+            let macro_type = macro_def.macro_type;
+            let stop = Arc::new(AtomicBool::new(false));
+            let stop_clone = stop.clone();
+            let uinput_clone = uinput.clone();
+
+            let handle = tokio::spawn(async move {
+                macro_runner::run_macro(macro_def, uinput_clone, stop_clone).await;
+            });
+
+            *active_macro = Some(MacroState {
+                stop,
+                handle,
+                macro_type,
+            });
+        }
     }
 }
 

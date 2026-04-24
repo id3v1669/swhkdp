@@ -21,7 +21,7 @@ pub struct Mode {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Hotkey {
     pub keybind: KeyBinding,
-    pub action: String,
+    pub action: HotkeyAction,
 }
 
 impl Value for &Hotkey {
@@ -67,6 +67,49 @@ pub struct KeyBinding {
     pub modifiers: HashSet<evdev::KeyCode>,
     pub send: bool,
     pub on_release: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum HotkeyAction {
+    Shell(String),
+    Macro(MacroDef),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MacroDef {
+    pub macro_type: MacroType,
+    pub steps: Vec<MacroStep>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum MacroType {
+    Simple,
+    Endless,
+    Hold,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum MacroStep {
+    KeyAction { key: KeyCode, action: KeyAction },
+    Move { x: i32, y: i32, duration: u32, move_type: MoveType, path: MovePath },
+    Repeat { count: u32, steps: Vec<MacroStep> },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum KeyAction {
+    Down,
+    Up,
+    Click,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum MoveType {
+    Constant,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum MovePath {
+    Direct,
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -138,6 +181,83 @@ fn action_has_empty_segment(action: &str) -> bool {
     action.contains('@') && action.split("&&").map(str::trim).any(str::is_empty)
 }
 
+fn parse_macro_steps(doc: &kdl::KdlDocument) -> Vec<MacroStep> {
+    let mut steps = vec![];
+    for node in doc.nodes() {
+        let name = node.name().value();
+        match name {
+            "move" => {
+                let x = node.get("x").and_then(|v| v.as_integer()).unwrap_or(0) as i32;
+                let y = node.get("y").and_then(|v| v.as_integer()).unwrap_or(0) as i32;
+                let duration =
+                    node.get("duration").and_then(|v| v.as_integer()).unwrap_or(0) as u32;
+                let move_type =
+                    match node.get("type").and_then(|v| v.as_string()).unwrap_or("constant") {
+                        _ => MoveType::Constant,
+                    };
+                let path = match node.get("paths").and_then(|v| v.as_string()).unwrap_or("direct") {
+                    _ => MovePath::Direct,
+                };
+                steps.push(MacroStep::Move { x, y, duration, move_type, path });
+            }
+            "repeat" => {
+                let count = node.get(0).and_then(|v| v.as_integer()).unwrap_or(1).max(0) as u32;
+                let inner = match node.children() {
+                    Some(c) => parse_macro_steps(c),
+                    None => vec![],
+                };
+                steps.push(MacroStep::Repeat { count, steps: inner });
+            }
+            _ => match KeyCode::from_str(name) {
+                Ok(key) => {
+                    let action_str = node.get(0).and_then(|v| v.as_string()).unwrap_or("click");
+                    let action = match action_str {
+                        "down" => KeyAction::Down,
+                        "up" => KeyAction::Up,
+                        "click" => KeyAction::Click,
+                        other => {
+                            log::warn!("Unknown button action in macro: {other:?}");
+                            continue;
+                        }
+                    };
+                    steps.push(MacroStep::KeyAction { key, action });
+                }
+                Err(_) => {
+                    log::warn!("Unknown macro step node: {name:?}");
+                }
+            },
+        }
+    }
+    steps
+}
+
+fn build_macro_hotkey(
+    node: &kdl::KdlNode,
+    keysym: KeyCode,
+    modifiers: HashSet<KeyCode>,
+    send: bool,
+    on_release: bool,
+    keycodes_raw: &str,
+) -> Hotkey {
+    let type_str = node.get(1).and_then(|v| v.as_string()).unwrap_or("simple");
+    let macro_type = match type_str {
+        "endless" => MacroType::Endless,
+        "hold" => MacroType::Hold,
+        _ => MacroType::Simple,
+    };
+    let steps = match node.children() {
+        Some(c) => parse_macro_steps(c),
+        None => {
+            log::warn!("@macro hotkey has no body: {keycodes_raw:?}");
+            vec![]
+        }
+    };
+    Hotkey {
+        keybind: KeyBinding { keysym, modifiers, send, on_release },
+        action: HotkeyAction::Macro(MacroDef { macro_type, steps }),
+    }
+}
+
 fn parse_mode(mode_name: &str, mode_node: &kdl::KdlNode, general: &GeneralSettings) -> Mode {
     let mut mode = Mode {
         name: mode_name.to_string(),
@@ -179,6 +299,17 @@ fn parse_mode(mode_name: &str, mode_node: &kdl::KdlNode, general: &GeneralSettin
             let key_str = objects[0];
             match KeyCode::from_str(key_str) {
                 Ok(from_key) => {
+                    if action_value == "@macro" {
+                        mode.hotkeys.push(build_macro_hotkey(
+                            hotkey_node,
+                            from_key,
+                            HashSet::new(),
+                            send,
+                            on_release,
+                            &keycodes_raw,
+                        ));
+                        continue;
+                    }
                     if let Ok(to_key) = KeyCode::from_str(&action_value) {
                         mode.remaps.insert(from_key, to_key);
                         continue;
@@ -198,7 +329,7 @@ fn parse_mode(mode_name: &str, mode_node: &kdl::KdlNode, general: &GeneralSettin
                             send,
                             on_release,
                         },
-                        action,
+                        action: HotkeyAction::Shell(action),
                     });
                     continue;
                 }
@@ -304,6 +435,23 @@ fn parse_mode(mode_name: &str, mode_node: &kdl::KdlNode, general: &GeneralSettin
             commands.push(action_value.clone());
         }
 
+        if action_value == "@macro" {
+            let first = build_macro_hotkey(
+                hotkey_node,
+                keys[0],
+                modifiers.clone(),
+                send,
+                on_release,
+                &keycodes_raw,
+            );
+            for key in &keys[1..] {
+                let mut hk = first.clone();
+                hk.keybind.keysym = *key;
+                mode.hotkeys.push(hk);
+            }
+            mode.hotkeys.push(first);
+            continue;
+        }
         for i in 0..keys.len() {
             if i >= commands.len() {
                 break;
@@ -322,7 +470,7 @@ fn parse_mode(mode_name: &str, mode_node: &kdl::KdlNode, general: &GeneralSettin
                     send,
                     on_release,
                 },
-                action,
+                action: HotkeyAction::Shell(action),
             });
         }
     }
@@ -337,9 +485,13 @@ fn parse_mode(mode_name: &str, mode_node: &kdl::KdlNode, general: &GeneralSettin
 }
 
 pub fn load(path: &Path) -> Result<Config, Error> {
-    let config_content_raw = fs::read_to_string(path)?;
+    let content = fs::read_to_string(path)?;
+    load_from_str(&content)
+}
+
+pub fn load_from_str(content: &str) -> Result<Config, Error> {
     let doc: kdl::KdlDocument =
-        config_content_raw.parse().map_err(|e: kdl::KdlError| Error::Parse(e.to_string()))?;
+        content.parse().map_err(|e: kdl::KdlError| Error::Parse(e.to_string()))?;
 
     let general = parse_general(&doc);
 
@@ -355,9 +507,8 @@ pub fn load(path: &Path) -> Result<Config, Error> {
 
     let default_mode =
         modes.iter().position(|m| m.name == general.default_mode).ok_or_else(|| {
-            Error::Parse(format!("Default mode '{}' not found in config", general.default_mode))
+            Error::Parse(format!("Default mode '{}' not found", general.default_mode))
         })?;
-
     Ok(Config { modes, default_mode })
 }
 
