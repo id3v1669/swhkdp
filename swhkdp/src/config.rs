@@ -69,6 +69,12 @@ pub struct KeyBinding {
     pub on_release: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ModeOptions {
+    pub swallow: bool,
+    pub oneoff: bool,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum HotkeyAction {
     Shell(String),
@@ -91,31 +97,26 @@ pub enum MacroType {
 #[derive(Debug, Clone, PartialEq)]
 pub enum MacroStep {
     KeyAction { key: KeyCode, action: KeyAction },
-    Move { x: i32, y: i32, duration: u32, move_type: MoveType, path: MovePath },
+    Move {
+        x: i32,
+        y: i32,
+        duration: u32,
+        move_type: MoveType,
+        path: MovePath,
+    },
     Repeat { count: u32, steps: Vec<MacroStep> },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum KeyAction {
-    Down,
-    Up,
-    Click,
-}
+pub enum KeyAction { Down, Up, Click }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum MoveType {
-    Constant,
-}
+pub enum MoveType { Constant, Accelerate, Decelerate }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum MovePath {
     Direct,
-}
-
-#[derive(Debug, Clone, PartialEq, Default)]
-pub struct ModeOptions {
-    pub swallow: bool,
-    pub oneoff: bool,
+    Arc { radius: i32, clockwise: bool },
 }
 
 struct GeneralSettings {
@@ -191,41 +192,57 @@ fn parse_macro_steps(doc: &kdl::KdlDocument) -> Vec<MacroStep> {
                 let y = node.get("y").and_then(|v| v.as_integer()).unwrap_or(0) as i32;
                 let duration =
                     node.get("duration").and_then(|v| v.as_integer()).unwrap_or(0) as u32;
-                let move_type =
-                    match node.get("type").and_then(|v| v.as_string()).unwrap_or("constant") {
-                        _ => MoveType::Constant,
-                    };
+                let move_type = match node
+                    .get("type")
+                    .and_then(|v| v.as_string())
+                    .unwrap_or("constant")
+                {
+                    "accelerate" => MoveType::Accelerate,
+                    "decelerate" => MoveType::Decelerate,
+                    _ => MoveType::Constant,
+                };
                 let path = match node.get("paths").and_then(|v| v.as_string()).unwrap_or("direct") {
+                    "arc" => {
+                        let radius =
+                            node.get("radius").and_then(|v| v.as_integer()).unwrap_or(0) as i32;
+                        let clockwise =
+                            node.get("dir").and_then(|v| v.as_string()) != Some("ccw");
+                        MovePath::Arc { radius, clockwise }
+                    }
                     _ => MovePath::Direct,
                 };
                 steps.push(MacroStep::Move { x, y, duration, move_type, path });
             }
             "repeat" => {
-                let count = node.get(0).and_then(|v| v.as_integer()).unwrap_or(1).max(0) as u32;
+                let count =
+                    node.get(0).and_then(|v| v.as_integer()).unwrap_or(1).max(0) as u32;
                 let inner = match node.children() {
                     Some(c) => parse_macro_steps(c),
                     None => vec![],
                 };
                 steps.push(MacroStep::Repeat { count, steps: inner });
             }
-            _ => match KeyCode::from_str(name) {
-                Ok(key) => {
-                    let action_str = node.get(0).and_then(|v| v.as_string()).unwrap_or("click");
-                    let action = match action_str {
-                        "down" => KeyAction::Down,
-                        "up" => KeyAction::Up,
-                        "click" => KeyAction::Click,
-                        other => {
-                            log::warn!("Unknown button action in macro: {other:?}");
-                            continue;
-                        }
-                    };
-                    steps.push(MacroStep::KeyAction { key, action });
+            _ => {
+                match KeyCode::from_str(name) {
+                    Ok(key) => {
+                        let action_str =
+                            node.get(0).and_then(|v| v.as_string()).unwrap_or("click");
+                        let action = match action_str {
+                            "down" => KeyAction::Down,
+                            "up" => KeyAction::Up,
+                            "click" => KeyAction::Click,
+                            other => {
+                                log::warn!("Unknown button action in macro: {other:?}");
+                                continue;
+                            }
+                        };
+                        steps.push(MacroStep::KeyAction { key, action });
+                    }
+                    Err(_) => {
+                        log::warn!("Unknown macro step node: {name:?}");
+                    }
                 }
-                Err(_) => {
-                    log::warn!("Unknown macro step node: {name:?}");
-                }
-            },
+            }
         }
     }
     steps
@@ -492,11 +509,8 @@ pub fn load(path: &Path) -> Result<Config, Error> {
 pub fn load_from_str(content: &str) -> Result<Config, Error> {
     let doc: kdl::KdlDocument =
         content.parse().map_err(|e: kdl::KdlError| Error::Parse(e.to_string()))?;
-
     let general = parse_general(&doc);
-
     let mut modes: Vec<Mode> = Vec::new();
-
     for node in doc.nodes() {
         let name = node.name().value();
         if name == "general" {
@@ -504,11 +518,10 @@ pub fn load_from_str(content: &str) -> Result<Config, Error> {
         }
         modes.push(parse_mode(name, node, &general));
     }
-
-    let default_mode =
-        modes.iter().position(|m| m.name == general.default_mode).ok_or_else(|| {
-            Error::Parse(format!("Default mode '{}' not found", general.default_mode))
-        })?;
+    let default_mode = modes
+        .iter()
+        .position(|m| m.name == general.default_mode)
+        .ok_or_else(|| Error::Parse(format!("Default mode '{}' not found", general.default_mode)))?;
     Ok(Config { modes, default_mode })
 }
 
