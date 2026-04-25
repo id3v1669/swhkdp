@@ -8,6 +8,7 @@ authors.workspace = true
 
 [features]
 rfkill = []
+macro = []
 
 [build-dependencies]
 flate2 = "1.1.2"

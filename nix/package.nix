@@ -6,16 +6,17 @@
   udev,
   killall,
   rfkillFeature ? false,
+  macroFeature ? false,
 }:
 rustPlatform.buildRustPackage rec {
   pname = "swhkdp";
-  version = "1.3.1-git";
+  version = "${(builtins.fromTOML (builtins.readFile (src + "/Cargo.toml"))).workspace.package.version}-git";
 
   src = lib.cleanSource ../.;
 
   cargoLock.lockFile = "${src}/Cargo.lock";
 
-  buildFeatures = [] ++ lib.optional rfkillFeature "rfkill";
+  buildFeatures = [] ++ lib.optional rfkillFeature "rfkill" ++ lib.optional macroFeature "macro";
 
   nativeBuildInputs = [
     pkg-config

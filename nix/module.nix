@@ -46,7 +46,13 @@ in {
     settings = mkOption {
       description = "Path to config file or config string for `swhkdp`";
       default = ''
-        KEY_LEFTMETA+KEY_LEFTSHIFT+KEY_T kitty
+        master {
+          KEY_LEFTMETA+KEY_LEFTSHIFT+KEY_T wezterm
+        }
+        general {
+          oneoff #false
+          swallow #false
+        }
       '';
       type = types.either types.str types.path;
     };

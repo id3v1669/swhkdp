@@ -8,6 +8,8 @@ use nix::{
 };
 use signal_hook::consts::signal::*;
 use signal_hook_tokio::Signals;
+#[cfg(feature = "macro")]
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
     collections::HashMap,
     error::Error,
@@ -18,7 +20,6 @@ use std::{
     path::{Path, PathBuf},
     process::{exit, id},
     sync::Arc,
-    sync::atomic::{AtomicBool, Ordering},
 };
 use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, RefreshKind, System, UpdateKind};
 use tokio::io::AsyncWriteExt;
@@ -32,16 +33,21 @@ use tokio_udev::{AsyncMonitorSocket, EventType, MonitorBuilder};
 
 mod config;
 mod environ;
+#[cfg(feature = "macro")]
 mod macro_runner;
 mod perms;
 mod uinput;
 
+#[cfg(feature = "macro")]
 struct MacroState {
     stop: Arc<AtomicBool>,
     handle: tokio::task::JoinHandle<()>,
     macro_type: config::MacroType,
     trigger_keybind: config::KeyBinding,
 }
+
+#[cfg(not(feature = "macro"))]
+struct MacroState;
 
 struct DeviceState {
     state_modifiers: AttributeSet<KeyCode>,
@@ -383,9 +389,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
 
             Some((node, Ok(mut event))) = device_stream_map.next() => {
+                #[cfg(feature = "macro")]
                 if let Some(ref state) = active_macro && state.handle.is_finished() {
-                        active_macro = None;
-
+                    active_macro = None;
                 }
 
                 let device_state = &mut device_states.get_mut(&node).expect("device not in states map");
@@ -429,12 +435,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 match event.value() {
                     // Key press
                     1 => {
-                        if let Some(ref state) = active_macro && matches!(state.macro_type, config::MacroType::Endless)
-                                && key == KeyCode::KEY_ESC
-                            {
-                                state.stop.store(true, Ordering::Relaxed);
-                                continue;
-
+                        #[cfg(feature = "macro")]
+                        if let Some(ref state) = active_macro
+                            && matches!(state.macro_type, config::MacroType::Endless)
+                            && key == KeyCode::KEY_ESC
+                        {
+                            state.stop.store(true, Ordering::Relaxed);
+                            continue;
                         }
 
                         if config::ALLOWED_MODIFIERS.contains(&key) {
@@ -447,13 +454,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
                     // Key release
                     0 => {
-                        if let Some(ref state) = active_macro && matches!(state.macro_type, config::MacroType::Hold) {
-                                let is_trigger_key = key == state.trigger_keybind.keysym
-                                    || state.trigger_keybind.modifiers.contains(&key);
-                                if is_trigger_key {
-                                    state.stop.store(true, Ordering::Relaxed);
-                                }
-
+                        #[cfg(feature = "macro")]
+                        if let Some(ref state) = active_macro
+                            && matches!(state.macro_type, config::MacroType::Hold)
+                        {
+                            let is_trigger_key = key == state.trigger_keybind.keysym
+                                || state.trigger_keybind.modifiers.contains(&key);
+                            if is_trigger_key {
+                                state.stop.store(true, Ordering::Relaxed);
+                            }
                         }
 
                         if last_hotkey.is_some() && pending_release {
@@ -661,6 +670,8 @@ async fn dispatch_hotkey(
     active_macro: &mut Option<MacroState>,
 ) {
     log::info!("Hotkey pressed: {hotkey:#?}");
+    #[cfg(not(feature = "macro"))]
+    let _ = (active_macro, uinput);
     if modes[*current_mode].options.oneoff {
         *current_mode = default_mode;
     }
@@ -715,6 +726,7 @@ async fn dispatch_hotkey(
             }
         }
 
+        #[cfg(feature = "macro")]
         config::HotkeyAction::Macro(macro_def) => {
             if let Some(state) = active_macro.as_ref() {
                 state.stop.store(true, Ordering::Relaxed);

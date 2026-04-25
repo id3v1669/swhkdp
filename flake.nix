@@ -20,8 +20,10 @@
         overlays = [];
       };
   in {
-    packages = eachSystem (system: {
-      default = nixpkgs.legacyPackages.${system}.callPackage ./nix/package.nix {};
+    packages = eachSystem (system: rec {
+      default = swhkdp;
+      swhkdp = nixpkgs.legacyPackages.${system}.callPackage ./nix/package.nix {};
+      swhkdp-macro = nixpkgs.legacyPackages.${system}.callPackage ./nix/package.nix {macroFeature = true;};
     });
 
     defaultPackage = eachSystem (system: self.packages.${system}.default);
