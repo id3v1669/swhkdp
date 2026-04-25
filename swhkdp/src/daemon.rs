@@ -732,6 +732,18 @@ async fn dispatch_hotkey(
                 state.stop.store(true, Ordering::Relaxed);
             }
 
+            let mut dev = uinput.lock().await;
+            for &modifier in &hotkey.keybind.modifiers {
+                let _ = dev.emit(&[evdev::InputEvent::new(evdev::EventType::KEY.0, modifier.0, 0)]);
+            }
+            if hotkey.keybind.send {
+                let _ = dev.emit(&[evdev::InputEvent::new(
+                    evdev::EventType::KEY.0,
+                    hotkey.keybind.keysym.0,
+                    0,
+                )]);
+            }
+
             let macro_type = macro_def.macro_type;
             let trigger_keybind = hotkey.keybind.clone();
             let stop = Arc::new(AtomicBool::new(false));

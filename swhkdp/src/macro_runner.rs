@@ -69,7 +69,7 @@ pub fn interpolate_arc(
         sweep += 2.0 * PI;
     }
 
-    let is_cw = sweep < 0.0;
+    let is_cw = sweep > 0.0;
     if is_cw != clockwise {
         sweep = -sweep;
     }
