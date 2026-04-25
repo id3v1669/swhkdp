@@ -498,8 +498,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
                 // Only emit event to virtual device when swallow option is off
                 if !modes[current_mode].options.swallow
-                // Don't emit event to virtual device if it's from a valid hotkey
-                && !event_in_hotkeys {
+                    // Don't emit event to virtual device if it's from a valid hotkey
+                    && !event_in_hotkeys
+                    // Don't forward keys to virtual device when macro is running.
+                    // Needed because otherwise macro keys get interupted by our keys even when they are part of shortcut
+                    && active_macro.is_none()
+                {
                     uinput_device.lock().await.emit(&[event]).unwrap();
                 }
 
