@@ -188,32 +188,75 @@ fn parse_macro_steps(doc: &kdl::KdlDocument) -> Vec<MacroStep> {
         let name = node.name().value();
         match name {
             "move" => {
-                let x = node.get("x").and_then(|v| v.as_integer()).unwrap_or(0) as i32;
-                let y = node.get("y").and_then(|v| v.as_integer()).unwrap_or(0) as i32;
-                let duration =
-                    node.get("duration").and_then(|v| v.as_integer()).unwrap_or(0) as u32;
-                let move_type = match node
-                    .get("type")
-                    .and_then(|v| v.as_string())
-                    .unwrap_or("constant")
-                {
-                    "accelerate" => MoveType::Accelerate,
-                    "decelerate" => MoveType::Decelerate,
-                    _ => MoveType::Constant,
+                let x = match node.get("x") {
+                    None => 0i32,
+                    Some(v) => match v.as_integer() {
+                        Some(n) => n as i32,
+                        None => { log::warn!("move x must be an integer; defaulting to 0"); 0 }
+                    },
                 };
-                let path = match node.get("paths").and_then(|v| v.as_string()).unwrap_or("direct") {
-                    "arc" => {
-                        let clockwise =
-                            node.get("dir").and_then(|v| v.as_string()) != Some("ccw");
+                let y = match node.get("y") {
+                    None => 0i32,
+                    Some(v) => match v.as_integer() {
+                        Some(n) => n as i32,
+                        None => { log::warn!("move y must be an integer; defaulting to 0"); 0 }
+                    },
+                };
+                let duration = match node.get("duration") {
+                    None => 0u32,
+                    Some(v) => match v.as_integer() {
+                        Some(n) if n >= 0 => n as u32,
+                        Some(n) => { log::warn!("move duration must be >= 0, got {n}; defaulting to 0"); 0 }
+                        None => { log::warn!("move duration must be an integer; defaulting to 0"); 0 }
+                    },
+                };
+                let move_type = match node.get("type").and_then(|v| v.as_string()) {
+                    None | Some("constant") => MoveType::Constant,
+                    Some("accelerate") => MoveType::Accelerate,
+                    Some("decelerate") => MoveType::Decelerate,
+                    Some(other) => {
+                        log::warn!("Unknown move type {other:?}; defaulting to \"constant\"");
+                        MoveType::Constant
+                    }
+                };
+                let path = match node.get("path").and_then(|v| v.as_string()) {
+                    None | Some("direct") => MovePath::Direct,
+                    Some("arc") => {
+                        let clockwise = match node.get("direction").and_then(|v| v.as_string()) {
+                            None | Some("cw") => true,
+                            Some("ccw") => false,
+                            Some(other) => {
+                                log::warn!("Unknown arc direction {other:?}; defaulting to \"cw\"");
+                                true
+                            }
+                        };
                         MovePath::Arc { clockwise }
                     }
-                    _ => MovePath::Direct,
+                    Some(other) => {
+                        log::warn!("Unknown path {other:?}; defaulting to \"direct\"");
+                        MovePath::Direct
+                    }
                 };
                 steps.push(MacroStep::Move { x, y, duration, move_type, path });
             }
             "repeat" => {
-                let count =
-                    node.get(0).and_then(|v| v.as_integer()).unwrap_or(1).max(0) as u32;
+                let count = match node.get(0).and_then(|v| v.as_integer()) {
+                    Some(n) if n >= 2 => match u32::try_from(n) {
+                        Ok(v) => v,
+                        Err(_) => {
+                            log::warn!("repeat count {n} exceeds u32::MAX; clamping");
+                            u32::MAX
+                        }
+                    },
+                    Some(n) => {
+                        log::warn!("repeat count must be >= 2, got {n}; skipping");
+                        continue;
+                    }
+                    None => {
+                        log::warn!("repeat count must be >= 2; skipping");
+                        continue;
+                    }
+                };
                 let inner = match node.children() {
                     Some(c) => parse_macro_steps(c),
                     None => vec![],
@@ -254,11 +297,14 @@ fn build_macro_hotkey(
     on_release: bool,
     keycodes_raw: &str,
 ) -> Hotkey {
-    let type_str = node.get(1).and_then(|v| v.as_string()).unwrap_or("simple");
-    let macro_type = match type_str {
-        "endless" => MacroType::Endless,
-        "hold" => MacroType::Hold,
-        _ => MacroType::Simple,
+    let macro_type = match node.get(1).and_then(|v| v.as_string()) {
+        None | Some("simple") => MacroType::Simple,
+        Some("endless") => MacroType::Endless,
+        Some("hold") => MacroType::Hold,
+        Some(unknown) => {
+            log::warn!("unknown macro type {unknown:?} for {keycodes_raw:?}; defaulting to simple");
+            MacroType::Simple
+        }
     };
     let steps = match node.children() {
         Some(c) => parse_macro_steps(c),
