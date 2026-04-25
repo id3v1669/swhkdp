@@ -116,7 +116,7 @@ pub enum MoveType { Constant, Accelerate, Decelerate }
 #[derive(Debug, Clone, PartialEq)]
 pub enum MovePath {
     Direct,
-    Arc { radius: i32, clockwise: bool },
+    Arc { clockwise: bool },
 }
 
 struct GeneralSettings {
@@ -203,11 +203,9 @@ fn parse_macro_steps(doc: &kdl::KdlDocument) -> Vec<MacroStep> {
                 };
                 let path = match node.get("paths").and_then(|v| v.as_string()).unwrap_or("direct") {
                     "arc" => {
-                        let radius =
-                            node.get("radius").and_then(|v| v.as_integer()).unwrap_or(0) as i32;
                         let clockwise =
                             node.get("dir").and_then(|v| v.as_string()) != Some("ccw");
-                        MovePath::Arc { radius, clockwise }
+                        MovePath::Arc { clockwise }
                     }
                     _ => MovePath::Direct,
                 };
@@ -453,20 +451,18 @@ fn parse_mode(mode_name: &str, mode_node: &kdl::KdlNode, general: &GeneralSettin
         }
 
         if action_value == "@macro" {
-            let first = build_macro_hotkey(
+            if keys.len() > 1 {
+                log::warn!("@macro does not support key group expansion: {keycodes_raw:?}; skipping");
+                continue;
+            }
+            mode.hotkeys.push(build_macro_hotkey(
                 hotkey_node,
                 keys[0],
                 modifiers.clone(),
                 send,
                 on_release,
                 &keycodes_raw,
-            );
-            for key in &keys[1..] {
-                let mut hk = first.clone();
-                hk.keybind.keysym = *key;
-                mode.hotkeys.push(hk);
-            }
-            mode.hotkeys.push(first);
+            ));
             continue;
         }
         for i in 0..keys.len() {

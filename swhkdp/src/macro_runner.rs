@@ -31,7 +31,7 @@ pub fn interpolate_direct(total_x: i32, total_y: i32, n: usize, speed: MoveType)
     result
 }
 
-pub fn interpolate_arc(total_x: i32, total_y: i32, _radius: i32, clockwise: bool, n: usize, speed: MoveType) -> Vec<(i32, i32)> {
+pub fn interpolate_arc(total_x: i32, total_y: i32, clockwise: bool, n: usize, speed: MoveType) -> Vec<(i32, i32)> {
     if n == 0 { return vec![]; }
     let chord_len = ((total_x * total_x + total_y * total_y) as f64).sqrt();
     
@@ -150,7 +150,7 @@ async fn execute_move(
     let n_steps = ((duration as u64) / STEP_INTERVAL_MS).max(1) as usize;
     let deltas = match path {
         MovePath::Direct => interpolate_direct(x, y, n_steps, move_type),
-        MovePath::Arc { radius, clockwise } => interpolate_arc(x, y, *radius, *clockwise, n_steps, move_type),
+        MovePath::Arc { clockwise } => interpolate_arc(x, y, *clockwise, n_steps, move_type),
     };
     for (dx, dy) in deltas {
         if stop.load(Ordering::Relaxed) { return; }
