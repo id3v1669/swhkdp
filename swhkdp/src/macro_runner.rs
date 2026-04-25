@@ -1,16 +1,23 @@
+use crate::config::{KeyAction, MacroDef, MacroStep, MacroType, MovePath, MoveType};
+use evdev::uinput::VirtualDevice;
+use evdev::{InputEvent, KeyCode, RelativeAxisCode};
 use std::f64::consts::PI;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::Mutex;
 use tokio::time::{Duration, sleep};
-use evdev::uinput::VirtualDevice;
-use evdev::{InputEvent, KeyCode, RelativeAxisCode};
-use crate::config::{KeyAction, MacroDef, MacroStep, MacroType, MovePath, MoveType};
 
 const STEP_INTERVAL_MS: u64 = 8;
 
-pub fn interpolate_direct(total_x: i32, total_y: i32, n: usize, speed: MoveType) -> Vec<(i32, i32)> {
-    if n == 0 { return vec![]; }
+pub fn interpolate_direct(
+    total_x: i32,
+    total_y: i32,
+    n: usize,
+    speed: MoveType,
+) -> Vec<(i32, i32)> {
+    if n == 0 {
+        return vec![];
+    }
     let mut result = Vec::with_capacity(n);
     let mut acc_x = 0i64;
     let mut acc_y = 0i64;
@@ -31,10 +38,18 @@ pub fn interpolate_direct(total_x: i32, total_y: i32, n: usize, speed: MoveType)
     result
 }
 
-pub fn interpolate_arc(total_x: i32, total_y: i32, clockwise: bool, n: usize, speed: MoveType) -> Vec<(i32, i32)> {
-    if n == 0 { return vec![]; }
+pub fn interpolate_arc(
+    total_x: i32,
+    total_y: i32,
+    clockwise: bool,
+    n: usize,
+    speed: MoveType,
+) -> Vec<(i32, i32)> {
+    if n == 0 {
+        return vec![];
+    }
     let chord_len = ((total_x * total_x + total_y * total_y) as f64).sqrt();
-    
+
     if chord_len == 0.0 {
         return vec![(0, 0); n];
     }
@@ -47,8 +62,12 @@ pub fn interpolate_arc(total_x: i32, total_y: i32, clockwise: bool, n: usize, sp
     let end_angle = (total_y as f64 - my).atan2(total_x as f64 - mx);
 
     let mut sweep = end_angle - start_angle;
-    while sweep > PI { sweep -= 2.0 * PI; }
-    while sweep < -PI { sweep += 2.0 * PI; }
+    while sweep > PI {
+        sweep -= 2.0 * PI;
+    }
+    while sweep < -PI {
+        sweep += 2.0 * PI;
+    }
 
     let is_cw = sweep < 0.0;
     if is_cw != clockwise {
@@ -75,7 +94,8 @@ pub fn interpolate_arc(total_x: i32, total_y: i32, clockwise: bool, n: usize, sp
         acc_y = pos_y;
     }
 
-    let (actual_x, actual_y): (i32, i32) = result.iter().fold((0, 0), |(ax, ay), (dx, dy)| (ax + dx, ay + dy));
+    let (actual_x, actual_y): (i32, i32) =
+        result.iter().fold((0, 0), |(ax, ay), (dx, dy)| (ax + dx, ay + dy));
     if let Some(last) = result.last_mut() {
         last.0 += total_x - actual_x;
         last.1 += total_y - actual_y;
@@ -133,7 +153,9 @@ async fn execute_key_action(
 }
 
 async fn release_all_pressed(pressed: &[KeyCode], uinput: &Mutex<VirtualDevice>) {
-    if pressed.is_empty() { return; }
+    if pressed.is_empty() {
+        return;
+    }
     let events: Vec<InputEvent> = pressed.iter().map(|&k| key_release_event(k)).collect();
     emit(uinput, &events).await;
 }
@@ -153,10 +175,16 @@ async fn execute_move(
         MovePath::Arc { clockwise } => interpolate_arc(x, y, *clockwise, n_steps, move_type),
     };
     for (dx, dy) in deltas {
-        if stop.load(Ordering::Relaxed) { return; }
+        if stop.load(Ordering::Relaxed) {
+            return;
+        }
         let mut events = vec![];
-        if dx != 0 { events.push(rel_event(RelativeAxisCode::REL_X, dx)); }
-        if dy != 0 { events.push(rel_event(RelativeAxisCode::REL_Y, dy)); }
+        if dx != 0 {
+            events.push(rel_event(RelativeAxisCode::REL_X, dx));
+        }
+        if dy != 0 {
+            events.push(rel_event(RelativeAxisCode::REL_Y, dy));
+        }
         if !events.is_empty() {
             emit(uinput, &events).await;
         }
@@ -172,7 +200,9 @@ fn execute_steps<'a>(
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + 'a>> {
     Box::pin(async move {
         for step in steps {
-            if stop.load(Ordering::Relaxed) { return; }
+            if stop.load(Ordering::Relaxed) {
+                return;
+            }
             match step {
                 MacroStep::KeyAction { key, action } => {
                     execute_key_action(*key, *action, uinput, pressed).await;
@@ -182,7 +212,9 @@ fn execute_steps<'a>(
                 }
                 MacroStep::Repeat { count, steps: inner } => {
                     for _ in 0..*count {
-                        if stop.load(Ordering::Relaxed) { return; }
+                        if stop.load(Ordering::Relaxed) {
+                            return;
+                        }
                         execute_steps(inner, uinput, stop, pressed).await;
                     }
                 }
@@ -201,12 +233,12 @@ pub async fn run_macro(
         MacroType::Simple => {
             execute_steps(&macro_def.steps, &uinput, &stop, &mut pressed).await;
         }
-        MacroType::Endless | MacroType::Hold => {
-            loop {
-                if stop.load(Ordering::Relaxed) { break; }
-                execute_steps(&macro_def.steps, &uinput, &stop, &mut pressed).await;
+        MacroType::Endless | MacroType::Hold => loop {
+            if stop.load(Ordering::Relaxed) {
+                break;
             }
-        }
+            execute_steps(&macro_def.steps, &uinput, &stop, &mut pressed).await;
+        },
     }
     release_all_pressed(&pressed, &uinput).await;
 }

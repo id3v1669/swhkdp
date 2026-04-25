@@ -97,21 +97,23 @@ pub enum MacroType {
 #[derive(Debug, Clone, PartialEq)]
 pub enum MacroStep {
     KeyAction { key: KeyCode, action: KeyAction },
-    Move {
-        x: i32,
-        y: i32,
-        duration: u32,
-        move_type: MoveType,
-        path: MovePath,
-    },
+    Move { x: i32, y: i32, duration: u32, move_type: MoveType, path: MovePath },
     Repeat { count: u32, steps: Vec<MacroStep> },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum KeyAction { Down, Up, Click }
+pub enum KeyAction {
+    Down,
+    Up,
+    Click,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum MoveType { Constant, Accelerate, Decelerate }
+pub enum MoveType {
+    Constant,
+    Accelerate,
+    Decelerate,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum MovePath {
@@ -192,22 +194,34 @@ fn parse_macro_steps(doc: &kdl::KdlDocument) -> Vec<MacroStep> {
                     None => 0i32,
                     Some(v) => match v.as_integer() {
                         Some(n) => n as i32,
-                        None => { log::warn!("move x must be an integer; defaulting to 0"); 0 }
+                        None => {
+                            log::warn!("move x must be an integer; defaulting to 0");
+                            0
+                        }
                     },
                 };
                 let y = match node.get("y") {
                     None => 0i32,
                     Some(v) => match v.as_integer() {
                         Some(n) => n as i32,
-                        None => { log::warn!("move y must be an integer; defaulting to 0"); 0 }
+                        None => {
+                            log::warn!("move y must be an integer; defaulting to 0");
+                            0
+                        }
                     },
                 };
                 let duration = match node.get("duration") {
                     None => 0u32,
                     Some(v) => match v.as_integer() {
                         Some(n) if n >= 0 => n as u32,
-                        Some(n) => { log::warn!("move duration must be >= 0, got {n}; defaulting to 0"); 0 }
-                        None => { log::warn!("move duration must be an integer; defaulting to 0"); 0 }
+                        Some(n) => {
+                            log::warn!("move duration must be >= 0, got {n}; defaulting to 0");
+                            0
+                        }
+                        None => {
+                            log::warn!("move duration must be an integer; defaulting to 0");
+                            0
+                        }
                     },
                 };
                 let move_type = match node.get("type").and_then(|v| v.as_string()) {
@@ -263,27 +277,24 @@ fn parse_macro_steps(doc: &kdl::KdlDocument) -> Vec<MacroStep> {
                 };
                 steps.push(MacroStep::Repeat { count, steps: inner });
             }
-            _ => {
-                match KeyCode::from_str(name) {
-                    Ok(key) => {
-                        let action_str =
-                            node.get(0).and_then(|v| v.as_string()).unwrap_or("click");
-                        let action = match action_str {
-                            "down" => KeyAction::Down,
-                            "up" => KeyAction::Up,
-                            "click" => KeyAction::Click,
-                            other => {
-                                log::warn!("Unknown button action in macro: {other:?}");
-                                continue;
-                            }
-                        };
-                        steps.push(MacroStep::KeyAction { key, action });
-                    }
-                    Err(_) => {
-                        log::warn!("Unknown macro step node: {name:?}");
-                    }
+            _ => match KeyCode::from_str(name) {
+                Ok(key) => {
+                    let action_str = node.get(0).and_then(|v| v.as_string()).unwrap_or("click");
+                    let action = match action_str {
+                        "down" => KeyAction::Down,
+                        "up" => KeyAction::Up,
+                        "click" => KeyAction::Click,
+                        other => {
+                            log::warn!("Unknown button action in macro: {other:?}");
+                            continue;
+                        }
+                    };
+                    steps.push(MacroStep::KeyAction { key, action });
                 }
-            }
+                Err(_) => {
+                    log::warn!("Unknown macro step node: {name:?}");
+                }
+            },
         }
     }
     steps
@@ -498,7 +509,9 @@ fn parse_mode(mode_name: &str, mode_node: &kdl::KdlNode, general: &GeneralSettin
 
         if action_value == "@macro" {
             if keys.len() > 1 {
-                log::warn!("@macro does not support key group expansion: {keycodes_raw:?}; skipping");
+                log::warn!(
+                    "@macro does not support key group expansion: {keycodes_raw:?}; skipping"
+                );
                 continue;
             }
             mode.hotkeys.push(build_macro_hotkey(
@@ -560,10 +573,10 @@ pub fn load_from_str(content: &str) -> Result<Config, Error> {
         }
         modes.push(parse_mode(name, node, &general));
     }
-    let default_mode = modes
-        .iter()
-        .position(|m| m.name == general.default_mode)
-        .ok_or_else(|| Error::Parse(format!("Default mode '{}' not found", general.default_mode)))?;
+    let default_mode =
+        modes.iter().position(|m| m.name == general.default_mode).ok_or_else(|| {
+            Error::Parse(format!("Default mode '{}' not found", general.default_mode))
+        })?;
     Ok(Config { modes, default_mode })
 }
 

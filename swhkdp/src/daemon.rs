@@ -20,11 +20,11 @@ use std::{
     sync::Arc,
     sync::atomic::{AtomicBool, Ordering},
 };
-use tokio::sync::Mutex;
 use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, RefreshKind, System, UpdateKind};
 use tokio::io::AsyncWriteExt;
 use tokio::net::UnixStream;
 use tokio::select;
+use tokio::sync::Mutex;
 use tokio::time::Duration;
 use tokio::time::{Instant, sleep};
 use tokio_stream::{StreamExt, StreamMap};
@@ -132,32 +132,32 @@ async fn main() -> Result<(), Box<dyn Error>> {
     if args.watch {
         let runtime_dir = env.runtime_dir;
         let pidfile = runtime_dir.join("swhkdp.pid");
-        if pidfile.exists() {
-            if let Ok(swhkdp_pid_str) = fs::read_to_string(&pidfile) {
-                let swhkdp_pid = swhkdp_pid_str.trim();
-                if !swhkdp_pid.is_empty() {
-                    if let Ok(pid) = swhkdp_pid.parse::<u32>() {
-                        let mut sys = System::new_with_specifics(
-                            RefreshKind::nothing()
-                                .with_processes(ProcessRefreshKind::nothing().with_exe(UpdateKind::Always)),
-                        );
-                        sys.refresh_processes_specifics(
-                            ProcessesToUpdate::All,
-                            true,
-                            ProcessRefreshKind::nothing().with_exe(UpdateKind::Always),
-                        );
-                        let current_pid = id();
-                        let current_exe = std::env::current_exe().unwrap();
-                        for (p, process) in sys.processes() {
-                            if p.as_u32() != current_pid 
-                                && p.as_u32() == pid 
-                                && process.exe() == Some(&current_exe) 
-                            {
-                                log::error!("Another instance of swhkdp is already running!");
-                                log::error!("pid of existing swhkdp process: {p}");
-                                exit(1);
-                            }
-                        }
+        if pidfile.exists()
+            && let Ok(swhkdp_pid_str) = fs::read_to_string(&pidfile)
+        {
+            let swhkdp_pid = swhkdp_pid_str.trim();
+            if !swhkdp_pid.is_empty()
+                && let Ok(pid) = swhkdp_pid.parse::<u32>()
+            {
+                let mut sys = System::new_with_specifics(
+                    RefreshKind::nothing()
+                        .with_processes(ProcessRefreshKind::nothing().with_exe(UpdateKind::Always)),
+                );
+                sys.refresh_processes_specifics(
+                    ProcessesToUpdate::All,
+                    true,
+                    ProcessRefreshKind::nothing().with_exe(UpdateKind::Always),
+                );
+                let current_pid = id();
+                let current_exe = std::env::current_exe().unwrap();
+                for (p, process) in sys.processes() {
+                    if p.as_u32() != current_pid
+                        && p.as_u32() == pid
+                        && process.exe() == Some(&current_exe)
+                    {
+                        log::error!("Another instance of swhkdp is already running!");
+                        log::error!("pid of existing swhkdp process: {p}");
+                        exit(1);
                     }
                 }
             }
@@ -383,10 +383,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
 
             Some((node, Ok(mut event))) = device_stream_map.next() => {
-                if let Some(ref state) = active_macro {
-                    if state.handle.is_finished() {
+                if let Some(ref state) = active_macro && state.handle.is_finished() {
                         active_macro = None;
-                    }
+
                 }
 
                 let device_state = &mut device_states.get_mut(&node).expect("device not in states map");
@@ -430,13 +429,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 match event.value() {
                     // Key press
                     1 => {
-                        if let Some(ref state) = active_macro {
-                            if matches!(state.macro_type, config::MacroType::Endless)
+                        if let Some(ref state) = active_macro && matches!(state.macro_type, config::MacroType::Endless)
                                 && key == KeyCode::KEY_ESC
                             {
                                 state.stop.store(true, Ordering::Relaxed);
                                 continue;
-                            }
+
                         }
 
                         if config::ALLOWED_MODIFIERS.contains(&key) {
@@ -449,14 +447,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
                     // Key release
                     0 => {
-                        if let Some(ref state) = active_macro {
-                            if matches!(state.macro_type, config::MacroType::Hold) {
+                        if let Some(ref state) = active_macro && matches!(state.macro_type, config::MacroType::Hold) {
                                 let is_trigger_key = key == state.trigger_keybind.keysym
                                     || state.trigger_keybind.modifiers.contains(&key);
                                 if is_trigger_key {
                                     state.stop.store(true, Ordering::Relaxed);
                                 }
-                            }
+
                         }
 
                         if last_hotkey.is_some() && pending_release {
@@ -466,7 +463,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         }
                         if config::ALLOWED_MODIFIERS.contains(&key) {
                             if let Some(hotkey) = &last_hotkey && hotkey.modifiers().contains(&key) {
+                                    let evict = hotkey.keysym();
                                     last_hotkey = None;
+                                    device_state.state_keysyms.remove(evict);
+
                             }
                             if device_state.state_modifiers.contains(key) {
                                 device_state.state_modifiers.remove(key);
@@ -637,7 +637,6 @@ pub fn setup_swhkdp(runtime_path: &Path) {
 }
 
 pub fn create_default_config(invoking_uid: u32, config_file_path: &Path) {
-
     perms::raise_privileges();
     match fs::File::create(config_file_path) {
         Ok(mut file) => {
@@ -678,7 +677,10 @@ async fn dispatch_hotkey(
                             let enter_mode = cmd.split(' ').nth(1).unwrap();
                             if enter_mode == "default" {
                                 *current_mode = default_mode;
-                                log::info!("Switching to default mode: {}", modes[*current_mode].name);
+                                log::info!(
+                                    "Switching to default mode: {}",
+                                    modes[*current_mode].name
+                                );
                             } else {
                                 let mut found = false;
                                 for (i, mode) in modes.iter().enumerate() {
@@ -728,12 +730,7 @@ async fn dispatch_hotkey(
                 macro_runner::run_macro(macro_def, uinput_clone, stop_clone).await;
             });
 
-            *active_macro = Some(MacroState {
-                stop,
-                handle,
-                macro_type,
-                trigger_keybind,
-            });
+            *active_macro = Some(MacroState { stop, handle, macro_type, trigger_keybind });
         }
     }
 }
