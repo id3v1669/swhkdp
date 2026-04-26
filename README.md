@@ -58,6 +58,8 @@ It is not recommended to link `~/.config/swhkdp/swhkdp.kdl` to `/etc/swhkdp/swhk
 Recently feature of remaping keys was introduced and if shortcuts are stored in user-accesable directory, malicious script might remap all your keys to "none" and lock you out.
 Also in the future macros feature will be implemented, so making config file user-accesable is not a safe option by any means.
 
+Macros feature is still in development. If you want to test it, build project with `--features macro`.
+
 ### Not sure what key to use? 
 launch swhkdp with -w or --watch. This will launch swhkdp without a config and output in cli key you are pressing.
 
@@ -80,7 +82,7 @@ To view upcoming tasks and project development open [TODO](./TODO.md)
 
 ## Contributors
 
-<a href="https://github.com/id3v1669/swhkdp/graphs/contributors">
+<a href="https://github.com/id3v1669/swhkdp/graphs/contributors?selectedMetric=additions">
   <img src="https://contrib.rocks/image?repo=id3v1669/swhkdp" />
 </a>
 
