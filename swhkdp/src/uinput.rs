@@ -1,4 +1,4 @@
-use evdev::{AttributeSet, KeyCode, RelativeAxisCode, SwitchCode, uinput::VirtualDevice};
+use evdev::{AttributeSet, KeyCode, PropType, RelativeAxisCode, SwitchCode, uinput::VirtualDevice};
 
 #[cfg(feature = "rfkill")]
 use nix::ioctl_none;
@@ -15,10 +15,13 @@ pub fn create_uinput_device() -> Result<VirtualDevice, Box<dyn std::error::Error
     let relative_axes: AttributeSet<RelativeAxisCode> =
         get_all_relative_axes().iter().copied().collect();
 
+    let props: AttributeSet<PropType> = [PropType::POINTER].iter().copied().collect();
+
     let device = VirtualDevice::builder()?
         .name("swhkdp virtual output")
         .with_keys(&keys)?
         .with_relative_axes(&relative_axes)?
+        .with_properties(&props)?
         .build()?;
     Ok(device)
 }

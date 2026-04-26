@@ -147,7 +147,8 @@ async fn execute_key_action(
                 log::warn!("macro 'click' on key {:?} that is already down — skipping", key);
                 return;
             }
-            emit(uinput, &[key_press_event(key), key_release_event(key)]).await;
+            emit(uinput, &[key_press_event(key)]).await;
+            emit(uinput, &[key_release_event(key)]).await;
         }
     }
 }
