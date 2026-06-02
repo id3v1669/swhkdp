@@ -3,7 +3,7 @@
 
   <p align="center">
   <a href="./LICENSE.md"><img src="https://img.shields.io/github/license/id3v1669/swhkdp?style=flat-square&logo=appveyor"></a>
-  <img src="https://img.shields.io/badge/cargo-v1.2.1-green?style=flat-square&logo=appveyor">
+  <img src="https://img.shields.io/badge/cargo-v1.3.0-green?style=flat-square&logo=appveyor">
   <img src="https://img.shields.io/github/issues/id3v1669/swhkdp?style=flat-square&logo=appveyor">
   <img src="https://img.shields.io/github/forks/id3v1669/swhkdp?style=flat-square&logo=appveyor">
   <img src="https://img.shields.io/github/stars/id3v1669/swhkdp?style=flat-square&logo=appveyor">
