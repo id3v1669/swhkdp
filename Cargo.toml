@@ -18,7 +18,7 @@ clap = { version = "4.6.1", features = ["derive"] }
 env_logger = "0.11.10"
 log = "0.4.29"
 nix = { version = "0.31", features = ["signal", "user", "fs", "ioctl"] }
-sysinfo = "0.38.4"
+sysinfo = "0.39.3"
 
 [profile.release]
 lto = true          # Enable Link Time Optimization

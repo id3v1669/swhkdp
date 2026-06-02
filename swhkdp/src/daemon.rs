@@ -871,13 +871,13 @@ async fn run_watch_mode(
                             device_stream_map.insert(node.to_string(), device.into_event_stream()?);
                         }
                     }
-                    EventType::Remove => {
-                        if device_stream_map.contains_key(node) {
+                    EventType::Remove
+                        if device_stream_map.contains_key(node) => {
                             let stream = device_stream_map.remove(node).expect("device not in stream_map");
                             let name = stream.device().name().unwrap_or("[unknown]");
                             log::info!("Watch mode: device '{name}' at '{node}' removed");
                         }
-                    }
+
                     _ => {}
                 }
             }
