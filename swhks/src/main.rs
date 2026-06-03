@@ -158,26 +158,27 @@ fn get_file_paths(env: &Env) -> (String, String) {
 }
 
 fn run_system_command(command: &str, log_path: &Path) {
-    let log_file = match OpenOptions::new().append(true).create(true).open(log_path) {
-        Ok(file) => file,
+    let (stdout, stderr) = match OpenOptions::new().append(true).create(true).open(log_path) {
+        Ok(file) => match file.try_clone() {
+            Ok(clone) => (Stdio::from(file), Stdio::from(clone)),
+            Err(e) => {
+                _ = Command::new("notify-send").arg(format!("ERROR {e}")).spawn();
+
+                (Stdio::null(), Stdio::null())
+            }
+        },
         Err(e) => {
             _ = Command::new("notify-send").arg(format!("ERROR {e}")).spawn();
-            exit(1);
-        }
-    };
-    let log_file_stderr = match log_file.try_clone() {
-        Ok(file) => file,
-        Err(e) => {
-            _ = Command::new("notify-send").arg(format!("ERROR {e}")).spawn();
-            exit(1);
+
+            (Stdio::null(), Stdio::null())
         }
     };
     match Command::new("sh")
         .arg("-c")
         .arg(command)
         .stdin(Stdio::null())
-        .stdout(log_file)
-        .stderr(log_file_stderr)
+        .stdout(stdout)
+        .stderr(stderr)
         .process_group(0)
         .spawn()
     {
