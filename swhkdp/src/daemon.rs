@@ -9,6 +9,8 @@ use nix::{
 use signal_hook::consts::signal::*;
 use signal_hook_tokio::Signals;
 #[cfg(feature = "macro")]
+use std::sync::Arc;
+#[cfg(feature = "macro")]
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
     collections::HashMap,
@@ -19,17 +21,19 @@ use std::{
     os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
     process::{exit, id},
-    sync::Arc,
 };
 use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, RefreshKind, System, UpdateKind};
 use tokio::io::AsyncWriteExt;
 use tokio::net::UnixStream;
 use tokio::select;
-use tokio::sync::Mutex;
 use tokio::time::Duration;
 use tokio::time::{Instant, sleep};
 use tokio_stream::{StreamExt, StreamMap};
 use tokio_udev::{AsyncMonitorSocket, EventType, MonitorBuilder};
+
+// shouldn't be reached
+// TODO: #shrink
+const IPC_QUEUE_CAP: usize = 256;
 
 mod config;
 mod environ;
@@ -234,17 +238,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     log::debug!("Supported device(s) detected: {}", supported_devices.len());
 
+    // TODO: #libissue
     // Apparently, having a single uinput device with keys, relative axes and switches
     // prevents some libraries to listen to these events. The easy fix is to have separate
     // virtual devices, one for keys and relative axes (`uinput_device`) and another one
     // just for switches (`uinput_switches_device`).
-    let uinput_device = Arc::new(Mutex::new(match uinput::create_uinput_device() {
+    let mut uinput_device = match uinput::create_uinput_device() {
         Ok(dev) => dev,
         Err(e) => {
             log::error!("Failed to create uinput device: {e:#?}");
             exit(1);
         }
-    }));
+    };
 
     let mut uinput_switches_device = match uinput::create_uinput_switches_device() {
         Ok(dev) => dev,
@@ -287,8 +292,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let hotkey_repeat_timer = sleep(Duration::from_millis(0));
     tokio::pin!(hotkey_repeat_timer);
 
-    // The socket we're sending the commands to.
+    // Unbounded macro->loop channel (loop owns the device, no lock)
+    // never drop macro events
+    #[cfg(feature = "macro")]
+    let (macro_emit_tx, mut macro_emit_rx) =
+        tokio::sync::mpsc::unbounded_channel::<Vec<evdev::InputEvent>>();
+
     let socket_file_path = env.fetch_runtime_socket_path();
+    let (cmd_tx, cmd_rx) = tokio::sync::mpsc::channel::<String>(IPC_QUEUE_CAP);
+    tokio::spawn(ipc_sender(cmd_rx, socket_file_path));
     loop {
         select! {
             _ = &mut hotkey_repeat_timer, if &last_hotkey.is_some() => {
@@ -296,8 +308,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 if hotkey.keybind.on_release {
                     continue;
                 }
-                dispatch_hotkey(hotkey.clone(), &socket_file_path, &modes, &mut current_mode, default_mode, uinput_device.clone(), &mut active_macro).await;
+                dispatch_hotkey(hotkey.clone(), &cmd_tx, &modes, &mut current_mode, default_mode, &mut uinput_device, #[cfg(feature = "macro")] &macro_emit_tx, &mut active_macro);
                 hotkey_repeat_timer.as_mut().reset(Instant::now() + Duration::from_millis(repeat_cooldown_duration));
+            }
+
+            //not fully in macro due to `select!` limitations
+            Some(events) = macro_emit_next(
+                #[cfg(feature = "macro")]
+                &mut macro_emit_rx,
+            ) => {
+                emit_or_warn(&mut uinput_device, &events);
             }
 
             Some(signal) = signals.next() => {
@@ -406,27 +426,27 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         }
                     },
                     EventSummary::Switch(..) => {
-                        uinput_switches_device.emit(&[event]).unwrap();
+                        emit_or_warn(&mut uinput_switches_device, &[event]);
                         continue
                     }
                     EventSummary::RelativeAxis(_, rlcode, _) => {
                         match rlcode {
                             evdev::RelativeAxisCode::REL_WHEEL_HI_RES => {
                                 if device_state.hi_res_wheel {
-                                    uinput_device.lock().await.emit(&[event]).unwrap();
+                                    emit_or_warn(&mut uinput_device, &[event]);
                                 }
                             }
                             evdev::RelativeAxisCode::REL_WHEEL => {
                                 if !device_state.hi_res_wheel {
-                                    uinput_device.lock().await.emit(&[event]).unwrap();
+                                    emit_or_warn(&mut uinput_device, &[event]);
                                 }
                             }
-                            _ => uinput_device.lock().await.emit(&[event]).unwrap(),
+                            _ => emit_or_warn(&mut uinput_device, &[event]),
                         }
                         continue
                     }
                     _ => {
-                        uinput_device.lock().await.emit(&[event]).unwrap();
+                        emit_or_warn(&mut uinput_device, &[event]);
                         continue
                     }
                 };
@@ -467,7 +487,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
                         if last_hotkey.is_some() && pending_release {
                             pending_release = false;
-                            dispatch_hotkey(last_hotkey.clone().unwrap(), &socket_file_path, &modes, &mut current_mode, default_mode, uinput_device.clone(), &mut active_macro).await;
+                            dispatch_hotkey(last_hotkey.clone().unwrap(), &cmd_tx, &modes, &mut current_mode, default_mode, &mut uinput_device, #[cfg(feature = "macro")] &macro_emit_tx, &mut active_macro);
                             last_hotkey = None;
                         }
                         if config::ALLOWED_MODIFIERS.contains(&key) {
@@ -492,18 +512,21 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     _ => {}
                 }
 
-                let possible_hotkeys: Vec<&config::Hotkey> = modes[current_mode].hotkeys.iter()
-                    .filter(|hotkey| hotkey.modifiers().len() == device_state.state_modifiers_count)
-                    .collect();
-
-                let event_in_hotkeys = modes[current_mode].hotkeys.iter().any(|hotkey| {
-                    hotkey.keysym().code() == event.code() &&
-                        (device_state.state_modifiers
-                        .iter()
-                        .all(|x| hotkey.modifiers().contains(&x)) &&
-                    device_state.state_modifiers_count == hotkey.modifiers().len())
-                    && !hotkey.is_send()
-                        });
+                // Single pass over the mode's hotkeys, no allocation
+                let (event_in_hotkeys, any_possible) = modes[current_mode].hotkeys.iter().fold(
+                    (false, false),
+                    |(eih, ap), hotkey| {
+                        (
+                            eih || event_consumed(
+                                hotkey,
+                                &device_state.state_modifiers,
+                                device_state.state_modifiers_count,
+                                event.code(),
+                            ),
+                            ap || hotkey.keybind.modifiers.len() == device_state.state_modifiers_count,
+                        )
+                    },
+                );
 
                 // Only emit event to virtual device when swallow option is off
                 if !modes[current_mode].options.swallow
@@ -513,29 +536,34 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     // Needed because otherwise macro keys get interupted by our keys even when they are part of shortcut
                     && active_macro.is_none()
                 {
-                    uinput_device.lock().await.emit(&[event]).unwrap();
+                    emit_or_warn(&mut uinput_device, &[event]);
                 }
 
-                if execution_is_paused || possible_hotkeys.is_empty() || last_hotkey.is_some() || active_macro.is_some() {
+                if execution_is_paused || !any_possible || last_hotkey.is_some() || active_macro.is_some() {
                     continue;
                 }
 
                 log::debug!("state_modifiers: {:#?}", device_state.state_modifiers);
                 log::debug!("state_keysyms: {:#?}", device_state.state_keysyms);
 
-                for hotkey in possible_hotkeys {
-                    // this should check if state_modifiers and hotkey.modifiers have the same elements
-                    if (device_state.state_modifiers.iter().all(|x| hotkey.modifiers().contains(&x))
-                        && device_state.state_modifiers_count == hotkey.modifiers().len())
-                        && device_state.state_keysyms.contains(hotkey.keysym())
-                    {
+                for hotkey in modes[current_mode]
+                    .hotkeys
+                    .iter()
+                    .filter(|hotkey| hotkey.keybind.modifiers.len() == device_state.state_modifiers_count)
+                {
+                    if hotkey_armed(
+                        hotkey,
+                        &device_state.state_modifiers,
+                        &device_state.state_keysyms,
+                        device_state.state_modifiers_count,
+                    ) {
                         last_hotkey = Some(hotkey.clone());
                         if pending_release { break; }
                         if hotkey.is_on_release() {
                             pending_release = true;
                             break;
                         }
-                        dispatch_hotkey(hotkey.clone(), &socket_file_path, &modes, &mut current_mode, default_mode, uinput_device.clone(), &mut active_macro).await;
+                        dispatch_hotkey(hotkey.clone(), &cmd_tx, &modes, &mut current_mode, default_mode, &mut uinput_device, #[cfg(feature = "macro")] &macro_emit_tx, &mut active_macro);
                         hotkey_repeat_timer.as_mut().reset(Instant::now() + Duration::from_millis(repeat_cooldown_duration));
                         continue;
                     }
@@ -549,6 +577,39 @@ async fn socket_write(command: &str, socket_path: PathBuf) -> Result<(), Box<dyn
     let mut stream = UnixStream::connect(socket_path).await?;
     stream.write_all(command.as_bytes()).await?;
     Ok(())
+}
+
+// Sends que to swhks one at a time,
+async fn ipc_sender(mut rx: tokio::sync::mpsc::Receiver<String>, socket_path: PathBuf) {
+    while let Some(cmd) = rx.recv().await {
+        if let Err(e) = socket_write(&cmd, socket_path.clone()).await {
+            log::error!("Failed to send command to swhks through IPC.");
+            log::error!("Please make sure that swhks is running.");
+            log::error!("Err: {e:#?}");
+        }
+    }
+    log::debug!("IPC sender stopped (all senders dropped).");
+}
+
+// `select!` workaround
+#[cfg(feature = "macro")]
+async fn macro_emit_next(
+    rx: &mut tokio::sync::mpsc::UnboundedReceiver<Vec<evdev::InputEvent>>,
+) -> Option<Vec<evdev::InputEvent>> {
+    rx.recv().await
+}
+
+#[cfg(not(feature = "macro"))]
+async fn macro_emit_next() -> Option<Vec<evdev::InputEvent>> {
+    std::future::pending().await
+}
+
+// Had to deal with a few glitchy devices, fail to write shouldn't be fatal. Just logged
+// and dropped to keep daemon alive instead of abort.
+fn emit_or_warn(dev: &mut evdev::uinput::VirtualDevice, events: &[evdev::InputEvent]) {
+    if let Err(e) = dev.emit(events) {
+        log::warn!("uinput emit failed (dropped {} event(s)): {e}", events.len());
+    }
 }
 
 pub fn check_input_group() {
@@ -660,13 +721,40 @@ pub fn create_default_config(invoking_uid: u32, config_file_path: &Path) {
     perms::drop_privileges(invoking_uid);
 }
 
-async fn dispatch_hotkey(
+fn hotkey_armed(
+    hotkey: &config::Hotkey,
+    state_modifiers: &AttributeSet<KeyCode>,
+    state_keysyms: &AttributeSet<KeyCode>,
+    state_modifiers_count: usize,
+) -> bool {
+    hotkey.keybind.modifiers.len() == state_modifiers_count
+        && state_modifiers.iter().all(|m| hotkey.keybind.modifiers.contains(&m))
+        && state_keysyms.contains(hotkey.keybind.keysym)
+}
+
+fn event_consumed(
+    hotkey: &config::Hotkey,
+    state_modifiers: &AttributeSet<KeyCode>,
+    state_modifiers_count: usize,
+    event_code: u16,
+) -> bool {
+    hotkey.keybind.keysym.code() == event_code
+        && state_modifiers.iter().all(|m| hotkey.keybind.modifiers.contains(&m))
+        && state_modifiers_count == hotkey.keybind.modifiers.len()
+        && !hotkey.is_send()
+}
+
+#[cfg_attr(feature = "macro", allow(clippy::too_many_arguments))]
+fn dispatch_hotkey(
     hotkey: Hotkey,
-    socket_path: &Path,
+    cmd_tx: &tokio::sync::mpsc::Sender<String>,
     modes: &[config::Mode],
     current_mode: &mut usize,
     default_mode: usize,
-    uinput: Arc<Mutex<evdev::uinput::VirtualDevice>>,
+    uinput: &mut evdev::uinput::VirtualDevice,
+    #[cfg(feature = "macro")] macro_emit_tx: &tokio::sync::mpsc::UnboundedSender<
+        Vec<evdev::InputEvent>,
+    >,
     active_macro: &mut Option<MacroState>,
 ) {
     log::info!("Hotkey pressed: {hotkey:#?}");
@@ -717,12 +805,16 @@ async fn dispatch_hotkey(
             if commands_to_send.ends_with(" &&") {
                 commands_to_send = commands_to_send.strip_suffix(" &&").unwrap().to_string();
             }
-            if !commands_to_send.is_empty()
-                && let Err(e) = socket_write(&commands_to_send, socket_path.to_path_buf()).await
-            {
-                log::error!("Failed to send command to swhks through IPC.");
-                log::error!("Please make sure that swhks is running.");
-                log::error!("Err: {e:#?}")
+            if !commands_to_send.is_empty() {
+                match cmd_tx.try_send(commands_to_send) {
+                    Ok(()) => {}
+                    Err(tokio::sync::mpsc::error::TrySendError::Full(cmd)) => {
+                        log::warn!("swhks command queue full ({IPC_QUEUE_CAP}); dropping: {cmd:?}");
+                    }
+                    Err(tokio::sync::mpsc::error::TrySendError::Closed(cmd)) => {
+                        log::error!("swhks command queue closed; dropping: {cmd:?}");
+                    }
+                }
             }
         }
 
@@ -732,26 +824,27 @@ async fn dispatch_hotkey(
                 state.stop.store(true, Ordering::Relaxed);
             }
 
-            let mut dev = uinput.lock().await;
             for &modifier in &hotkey.keybind.modifiers {
-                let _ = dev.emit(&[evdev::InputEvent::new(evdev::EventType::KEY.0, modifier.0, 0)]);
+                emit_or_warn(
+                    uinput,
+                    &[evdev::InputEvent::new(evdev::EventType::KEY.0, modifier.0, 0)],
+                );
             }
             if hotkey.keybind.send {
-                let _ = dev.emit(&[evdev::InputEvent::new(
-                    evdev::EventType::KEY.0,
-                    hotkey.keybind.keysym.0,
-                    0,
-                )]);
+                emit_or_warn(
+                    uinput,
+                    &[evdev::InputEvent::new(evdev::EventType::KEY.0, hotkey.keybind.keysym.0, 0)],
+                );
             }
 
             let macro_type = macro_def.macro_type;
             let trigger_keybind = hotkey.keybind.clone();
             let stop = Arc::new(AtomicBool::new(false));
             let stop_clone = stop.clone();
-            let uinput_clone = uinput.clone();
+            let emit_tx = macro_emit_tx.clone();
 
             let handle = tokio::spawn(async move {
-                macro_runner::run_macro(macro_def, uinput_clone, stop_clone).await;
+                macro_runner::run_macro(macro_def, emit_tx, stop_clone).await;
             });
 
             *active_macro = Some(MacroState { stop, handle, macro_type, trigger_keybind });

@@ -1,10 +1,9 @@
 use crate::config::{KeyAction, MacroDef, MacroStep, MacroType, MovePath, MoveType};
-use evdev::uinput::VirtualDevice;
 use evdev::{InputEvent, KeyCode, RelativeAxisCode};
 use std::f64::consts::PI;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use tokio::sync::Mutex;
+use tokio::sync::mpsc::UnboundedSender;
 use tokio::time::{Duration, sleep};
 
 const STEP_INTERVAL_MS: u64 = 8;
@@ -116,20 +115,19 @@ fn rel_event(axis: RelativeAxisCode, value: i32) -> InputEvent {
     InputEvent::new(evdev::EventType::RELATIVE.0, axis.0, value)
 }
 
-async fn emit(uinput: &Mutex<VirtualDevice>, events: &[InputEvent]) {
-    let mut dev = uinput.lock().await;
-    let _ = dev.emit(events);
+fn emit(tx: &UnboundedSender<Vec<InputEvent>>, events: Vec<InputEvent>) {
+    let _ = tx.send(events);
 }
 
-async fn execute_key_action(
+fn execute_key_action(
     key: KeyCode,
     action: KeyAction,
-    uinput: &Mutex<VirtualDevice>,
+    tx: &UnboundedSender<Vec<InputEvent>>,
     pressed: &mut Vec<KeyCode>,
 ) {
     match action {
         KeyAction::Down => {
-            emit(uinput, &[key_press_event(key)]).await;
+            emit(tx, vec![key_press_event(key)]);
             if !pressed.contains(&key) {
                 pressed.push(key);
             }
@@ -139,7 +137,7 @@ async fn execute_key_action(
                 log::warn!("macro 'up' on key {:?} that is not down — skipping", key);
                 return;
             }
-            emit(uinput, &[key_release_event(key)]).await;
+            emit(tx, vec![key_release_event(key)]);
             pressed.retain(|&k| k != key);
         }
         KeyAction::Click => {
@@ -147,18 +145,18 @@ async fn execute_key_action(
                 log::warn!("macro 'click' on key {:?} that is already down — skipping", key);
                 return;
             }
-            emit(uinput, &[key_press_event(key)]).await;
-            emit(uinput, &[key_release_event(key)]).await;
+            emit(tx, vec![key_press_event(key)]);
+            emit(tx, vec![key_release_event(key)]);
         }
     }
 }
 
-async fn release_all_pressed(pressed: &[KeyCode], uinput: &Mutex<VirtualDevice>) {
+fn release_all_pressed(pressed: &[KeyCode], tx: &UnboundedSender<Vec<InputEvent>>) {
     if pressed.is_empty() {
         return;
     }
     let events: Vec<InputEvent> = pressed.iter().map(|&k| key_release_event(k)).collect();
-    emit(uinput, &events).await;
+    emit(tx, events);
 }
 
 async fn execute_move(
@@ -167,7 +165,7 @@ async fn execute_move(
     duration: u32,
     move_type: MoveType,
     path: &MovePath,
-    uinput: &Mutex<VirtualDevice>,
+    tx: &UnboundedSender<Vec<InputEvent>>,
     stop: &AtomicBool,
 ) {
     let n_steps = ((duration as u64) / STEP_INTERVAL_MS).max(1) as usize;
@@ -187,7 +185,7 @@ async fn execute_move(
             events.push(rel_event(RelativeAxisCode::REL_Y, dy));
         }
         if !events.is_empty() {
-            emit(uinput, &events).await;
+            emit(tx, events);
         }
         sleep(Duration::from_millis(STEP_INTERVAL_MS)).await;
     }
@@ -195,7 +193,7 @@ async fn execute_move(
 
 fn execute_steps<'a>(
     steps: &'a [MacroStep],
-    uinput: &'a Mutex<VirtualDevice>,
+    tx: &'a UnboundedSender<Vec<InputEvent>>,
     stop: &'a AtomicBool,
     pressed: &'a mut Vec<KeyCode>,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + 'a>> {
@@ -206,17 +204,17 @@ fn execute_steps<'a>(
             }
             match step {
                 MacroStep::KeyAction { key, action } => {
-                    execute_key_action(*key, *action, uinput, pressed).await;
+                    execute_key_action(*key, *action, tx, pressed);
                 }
                 MacroStep::Move { x, y, duration, move_type, path } => {
-                    execute_move(*x, *y, *duration, *move_type, path, uinput, stop).await;
+                    execute_move(*x, *y, *duration, *move_type, path, tx, stop).await;
                 }
                 MacroStep::Repeat { count, steps: inner } => {
                     for _ in 0..*count {
                         if stop.load(Ordering::Relaxed) {
                             return;
                         }
-                        execute_steps(inner, uinput, stop, pressed).await;
+                        execute_steps(inner, tx, stop, pressed).await;
                     }
                 }
             }
@@ -226,20 +224,20 @@ fn execute_steps<'a>(
 
 pub async fn run_macro(
     macro_def: MacroDef,
-    uinput: Arc<Mutex<VirtualDevice>>,
+    tx: UnboundedSender<Vec<InputEvent>>,
     stop: Arc<AtomicBool>,
 ) {
     let mut pressed: Vec<KeyCode> = vec![];
     match macro_def.macro_type {
         MacroType::Simple => {
-            execute_steps(&macro_def.steps, &uinput, &stop, &mut pressed).await;
+            execute_steps(&macro_def.steps, &tx, &stop, &mut pressed).await;
         }
         MacroType::Endless | MacroType::Hold => loop {
             if stop.load(Ordering::Relaxed) {
                 break;
             }
-            execute_steps(&macro_def.steps, &uinput, &stop, &mut pressed).await;
+            execute_steps(&macro_def.steps, &tx, &stop, &mut pressed).await;
         },
     }
-    release_all_pressed(&pressed, &uinput).await;
+    release_all_pressed(&pressed, &tx);
 }
