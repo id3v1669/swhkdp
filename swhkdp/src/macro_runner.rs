@@ -3,7 +3,7 @@ use evdev::{InputEvent, KeyCode, RelativeAxisCode};
 use std::f64::consts::PI;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::Sender;
 use tokio::time::{Duration, sleep};
 
 const STEP_INTERVAL_MS: u64 = 8;
@@ -115,19 +115,19 @@ fn rel_event(axis: RelativeAxisCode, value: i32) -> InputEvent {
     InputEvent::new(evdev::EventType::RELATIVE.0, axis.0, value)
 }
 
-fn emit(tx: &UnboundedSender<Vec<InputEvent>>, events: Vec<InputEvent>) {
-    let _ = tx.send(events);
+async fn emit(tx: &Sender<Vec<InputEvent>>, events: Vec<InputEvent>) {
+    let _ = tx.send(events).await;
 }
 
-fn execute_key_action(
+async fn execute_key_action(
     key: KeyCode,
     action: KeyAction,
-    tx: &UnboundedSender<Vec<InputEvent>>,
+    tx: &Sender<Vec<InputEvent>>,
     pressed: &mut Vec<KeyCode>,
 ) {
     match action {
         KeyAction::Down => {
-            emit(tx, vec![key_press_event(key)]);
+            emit(tx, vec![key_press_event(key)]).await;
             if !pressed.contains(&key) {
                 pressed.push(key);
             }
@@ -137,7 +137,7 @@ fn execute_key_action(
                 log::warn!("macro 'up' on key {:?} that is not down — skipping", key);
                 return;
             }
-            emit(tx, vec![key_release_event(key)]);
+            emit(tx, vec![key_release_event(key)]).await;
             pressed.retain(|&k| k != key);
         }
         KeyAction::Click => {
@@ -145,18 +145,18 @@ fn execute_key_action(
                 log::warn!("macro 'click' on key {:?} that is already down — skipping", key);
                 return;
             }
-            emit(tx, vec![key_press_event(key)]);
-            emit(tx, vec![key_release_event(key)]);
+            emit(tx, vec![key_press_event(key)]).await;
+            emit(tx, vec![key_release_event(key)]).await;
         }
     }
 }
 
-fn release_all_pressed(pressed: &[KeyCode], tx: &UnboundedSender<Vec<InputEvent>>) {
+async fn release_all_pressed(pressed: &[KeyCode], tx: &Sender<Vec<InputEvent>>) {
     if pressed.is_empty() {
         return;
     }
     let events: Vec<InputEvent> = pressed.iter().map(|&k| key_release_event(k)).collect();
-    emit(tx, events);
+    emit(tx, events).await;
 }
 
 async fn execute_move(
@@ -165,7 +165,7 @@ async fn execute_move(
     duration: u32,
     move_type: MoveType,
     path: &MovePath,
-    tx: &UnboundedSender<Vec<InputEvent>>,
+    tx: &Sender<Vec<InputEvent>>,
     stop: &AtomicBool,
 ) {
     let n_steps = ((duration as u64) / STEP_INTERVAL_MS).max(1) as usize;
@@ -185,7 +185,7 @@ async fn execute_move(
             events.push(rel_event(RelativeAxisCode::REL_Y, dy));
         }
         if !events.is_empty() {
-            emit(tx, events);
+            emit(tx, events).await;
         }
         sleep(Duration::from_millis(STEP_INTERVAL_MS)).await;
     }
@@ -193,7 +193,7 @@ async fn execute_move(
 
 fn execute_steps<'a>(
     steps: &'a [MacroStep],
-    tx: &'a UnboundedSender<Vec<InputEvent>>,
+    tx: &'a Sender<Vec<InputEvent>>,
     stop: &'a AtomicBool,
     pressed: &'a mut Vec<KeyCode>,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + 'a>> {
@@ -204,7 +204,7 @@ fn execute_steps<'a>(
             }
             match step {
                 MacroStep::KeyAction { key, action } => {
-                    execute_key_action(*key, *action, tx, pressed);
+                    execute_key_action(*key, *action, tx, pressed).await;
                 }
                 MacroStep::Move { x, y, duration, move_type, path } => {
                     execute_move(*x, *y, *duration, *move_type, path, tx, stop).await;
@@ -222,11 +222,7 @@ fn execute_steps<'a>(
     })
 }
 
-pub async fn run_macro(
-    macro_def: MacroDef,
-    tx: UnboundedSender<Vec<InputEvent>>,
-    stop: Arc<AtomicBool>,
-) {
+pub async fn run_macro(macro_def: MacroDef, tx: Sender<Vec<InputEvent>>, stop: Arc<AtomicBool>) {
     let mut pressed: Vec<KeyCode> = vec![];
     match macro_def.macro_type {
         MacroType::Simple => {
@@ -239,5 +235,5 @@ pub async fn run_macro(
             execute_steps(&macro_def.steps, &tx, &stop, &mut pressed).await;
         },
     }
-    release_all_pressed(&pressed, &tx);
+    release_all_pressed(&pressed, &tx).await;
 }

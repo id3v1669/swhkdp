@@ -35,6 +35,10 @@ use tokio_udev::{AsyncMonitorSocket, EventType, MonitorBuilder};
 // TODO: #shrink
 const IPC_QUEUE_CAP: usize = 256;
 
+// TODO: #shrink2
+#[cfg(feature = "macro")]
+const MACRO_QUEUE_CAP: usize = 256;
+
 mod config;
 mod environ;
 #[cfg(feature = "macro")]
@@ -292,11 +296,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let hotkey_repeat_timer = sleep(Duration::from_millis(0));
     tokio::pin!(hotkey_repeat_timer);
 
-    // Unbounded macro->loop channel (loop owns the device, no lock)
+    // macro->loop channel (loop owns the device, no lock), pressure instead of dropping.
     // never drop macro events
     #[cfg(feature = "macro")]
     let (macro_emit_tx, mut macro_emit_rx) =
-        tokio::sync::mpsc::unbounded_channel::<Vec<evdev::InputEvent>>();
+        tokio::sync::mpsc::channel::<Vec<evdev::InputEvent>>(MACRO_QUEUE_CAP);
 
     let socket_file_path = env.fetch_runtime_socket_path();
     let (cmd_tx, cmd_rx) = tokio::sync::mpsc::channel::<String>(IPC_QUEUE_CAP);
@@ -591,7 +595,7 @@ async fn ipc_sender(mut rx: tokio::sync::mpsc::Receiver<String>, socket_path: Pa
 // `select!` workaround
 #[cfg(feature = "macro")]
 async fn macro_emit_next(
-    rx: &mut tokio::sync::mpsc::UnboundedReceiver<Vec<evdev::InputEvent>>,
+    rx: &mut tokio::sync::mpsc::Receiver<Vec<evdev::InputEvent>>,
 ) -> Option<Vec<evdev::InputEvent>> {
     rx.recv().await
 }
@@ -753,9 +757,7 @@ fn dispatch_hotkey(
     current_mode: &mut usize,
     default_mode: usize,
     uinput: &mut evdev::uinput::VirtualDevice,
-    #[cfg(feature = "macro")] macro_emit_tx: &tokio::sync::mpsc::UnboundedSender<
-        Vec<evdev::InputEvent>,
-    >,
+    #[cfg(feature = "macro")] macro_emit_tx: &tokio::sync::mpsc::Sender<Vec<evdev::InputEvent>>,
     active_macro: &mut Option<MacroState>,
 ) {
     log::info!("Hotkey pressed: {hotkey:#?}");

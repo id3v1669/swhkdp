@@ -5,4 +5,5 @@
 - [ ] Write tests for config and functions
 - [ ] Check if #libissue is still valid
 - [ ] Test #shrink worst case scenarios after macros full implementation. timeout, shrink etc...
+- [ ] Test #shrink2 worst case scenarios after macros full implementation. (loop, hold, long sequenses)
 
