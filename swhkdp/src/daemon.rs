@@ -303,11 +303,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     tokio::spawn(ipc_sender(cmd_rx, socket_file_path));
     loop {
         select! {
-            _ = &mut hotkey_repeat_timer, if &last_hotkey.is_some() => {
+            _ = &mut hotkey_repeat_timer, if repeat_timer_active(last_hotkey.as_ref()) => {
                 let hotkey = last_hotkey.clone().unwrap();
-                if hotkey.keybind.on_release {
-                    continue;
-                }
                 dispatch_hotkey(hotkey.clone(), &cmd_tx, &modes, &mut current_mode, default_mode, &mut uinput_device, #[cfg(feature = "macro")] &macro_emit_tx, &mut active_macro);
                 hotkey_repeat_timer.as_mut().reset(Instant::now() + Duration::from_millis(repeat_cooldown_duration));
             }
@@ -742,6 +739,10 @@ fn event_consumed(
         && state_modifiers.iter().all(|m| hotkey.keybind.modifiers.contains(&m))
         && state_modifiers_count == hotkey.keybind.modifiers.len()
         && !hotkey.is_send()
+}
+
+fn repeat_timer_active(last_hotkey: Option<&config::Hotkey>) -> bool {
+    last_hotkey.is_some_and(|hotkey| !hotkey.keybind.on_release)
 }
 
 #[cfg_attr(feature = "macro", allow(clippy::too_many_arguments))]
