@@ -316,7 +316,7 @@ fn build_macro_hotkey(
     send: bool,
     on_release: bool,
     keycodes_raw: &str,
-) -> Hotkey {
+) -> Option<Hotkey> {
     let macro_type = match node.get(1).and_then(|v| v.as_string()) {
         None | Some("simple") => MacroType::Simple,
         Some("endless") => MacroType::Endless,
@@ -333,10 +333,13 @@ fn build_macro_hotkey(
             vec![]
         }
     };
-    Hotkey {
+    if steps.is_empty() {
+        log::warn!("Skipping @macro hotkey has not valid steps: {keycodes_raw:?}")
+    }
+    Some(Hotkey {
         keybind: KeyBinding { keysym, modifiers, send, on_release },
         action: HotkeyAction::Macro(MacroDef { macro_type, steps }),
-    }
+    })
 }
 
 fn parse_mode(mode_name: &str, mode_node: &kdl::KdlNode, general: &GeneralSettings) -> Mode {
@@ -382,14 +385,16 @@ fn parse_mode(mode_name: &str, mode_node: &kdl::KdlNode, general: &GeneralSettin
                 Ok(from_key) => {
                     if action_value == "@macro" {
                         #[cfg(feature = "macro")]
-                        mode.hotkeys.push(build_macro_hotkey(
+                        if let Some(hk) = build_macro_hotkey(
                             hotkey_node,
                             from_key,
                             HashSet::new(),
                             send,
                             on_release,
                             &keycodes_raw,
-                        ));
+                        ) {
+                            mode.hotkeys.push(hk);
+                        };
                         #[cfg(not(feature = "macro"))]
                         log::warn!(
                             "@macro hotkey ignored (macro feature not enabled): {keycodes_raw:?}"
@@ -529,14 +534,16 @@ fn parse_mode(mode_name: &str, mode_node: &kdl::KdlNode, general: &GeneralSettin
                 continue;
             }
             #[cfg(feature = "macro")]
-            mode.hotkeys.push(build_macro_hotkey(
+            if let Some(hk) = build_macro_hotkey(
                 hotkey_node,
                 keys[0],
                 modifiers.clone(),
                 send,
                 on_release,
                 &keycodes_raw,
-            ));
+            ) {
+                mode.hotkeys.push(hk);
+            };
             #[cfg(not(feature = "macro"))]
             log::warn!("@macro hotkey ignored (macro feature not enabled): {keycodes_raw:?}");
             continue;
