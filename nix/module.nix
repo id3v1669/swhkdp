@@ -11,7 +11,7 @@ self: {
   inherit (lib.options) mkOption mkEnableOption;
 in {
   options.services.swhkdp = {
-    enable = mkEnableOption "Simple Wayland HotKey Daemon";
+    enable = mkEnableOption "Simple Wayland HotKey Daemon Polkit";
 
     username = mkOption {
       description = "Username to resolve profile PATH for the swhks user service.";

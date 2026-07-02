@@ -15,10 +15,10 @@ authors = [
 
 [workspace.dependencies]
 clap = { version = "4.6.1", features = ["derive"] }
-env_logger = "0.11.10"
-log = "0.4.32"
+env_logger = "0.11.11"
+log = "0.4.33"
 nix = { version = "0.31", features = ["signal", "user", "fs", "ioctl"] }
-sysinfo = "0.39.3"
+sysinfo = "0.39.5"
 
 [profile.release]
 lto = true          # Enable Link Time Optimization
