@@ -68,24 +68,21 @@ in {
 
     environment.systemPackages = [cfg.package];
 
+    environment.etc."swhkdp/config.kdl".source =
+      if builtins.isPath cfg.settings
+      then cfg.settings
+      else pkgs.writeText "config.kdl" cfg.settings;
+
     systemd.user.services.swhkdp = {
       description = "Simple Wayland HotKey Daemon";
       bindsTo = ["default.target"];
       script = let
-        swhkdpcfg =
-          if builtins.isPath cfg.settings
-          then cfg.settings
-          else pkgs.writeText "swhkdp.kdl" cfg.settings;
-        swhkdpCmd =
-          if cfg.settings != null
-          then "--config ${swhkdpcfg}"
-          else "";
         devicesCmd =
           if cfg.devices != []
           then "-D \"${lib.concatStringsSep "|" cfg.devices}\""
           else "";
       in ''
-        /run/wrappers/bin/pkexec ${cfg.package}/bin/swhkdp ${swhkdpCmd} ${devicesCmd}\
+        /run/wrappers/bin/pkexec ${cfg.package}/bin/swhkdp ${devicesCmd}\
           --cooldown ${toString cfg.cooldown} \
           -I "${lib.concatStringsSep "|" cfg.ignore}"
       '';
@@ -115,11 +112,11 @@ in {
       enable = true;
       extraConfig = ''
         polkit.addRule(function(action, subject) {
-            if (action.id == "com.github.swhkdp.pkexec"  &&
-                subject.local == true &&
-                subject.active == true &&) {
+            if (action.id == "com.github.swhkdp.pkexec" &&
+                subject.active &&
+                subject.user == "${cfg.username}") {
                     return polkit.Result.YES;
-                }
+            }
         });
       '';
     };

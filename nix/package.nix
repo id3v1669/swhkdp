@@ -39,7 +39,7 @@ rustPlatform.buildRustPackage rec {
         <defaults>
           <allow_any>no</allow_any>
           <allow_inactive>no</allow_inactive>
-          <allow_active>yes</allow_active>
+          <allow_active>auth_admin</allow_active>
         </defaults>
         <annotate key="org.freedesktop.policykit.exec.path">$out/bin/swhkdp</annotate>
       </action>

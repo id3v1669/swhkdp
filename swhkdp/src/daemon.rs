@@ -4,7 +4,7 @@ use config::Hotkey;
 use evdev::{AttributeSet, Device, EventSummary, KeyCode};
 use nix::{
     sys::stat::{Mode, umask},
-    unistd::{Group, Uid},
+    unistd::Uid,
 };
 use signal_hook::consts::signal::*;
 use signal_hook_tokio::Signals;
@@ -35,6 +35,9 @@ use tokio_udev::{AsyncMonitorSocket, EventType, MonitorBuilder};
 // TODO: #shrink
 const IPC_QUEUE_CAP: usize = 256;
 
+/// The fixed system config path. In release builds this is the only config
+const RELEASE_CONFIG_PATH: &str = "/etc/swhkdp/config.kdl";
+
 // TODO: #shrink2
 #[cfg(feature = "macro")]
 const MACRO_QUEUE_CAP: usize = 256;
@@ -43,6 +46,7 @@ mod config;
 mod environ;
 #[cfg(feature = "macro")]
 mod macro_runner;
+#[cfg(not(debug_assertions))]
 mod perms;
 mod uinput;
 
@@ -83,7 +87,8 @@ impl DeviceState {
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 struct Args {
-    /// Set a custom config file path.
+    /// Set a custom config file path. Debug builds only
+    #[cfg(debug_assertions)]
     #[arg(short = 'c', long, value_name = "FILE")]
     config: Option<PathBuf>,
 
@@ -129,17 +134,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     log::debug!("Logger initialized.");
 
     if args.verify_config {
-        let config_file_path: PathBuf = args
-            .config
-            .as_ref()
-            .map_or_else(|| PathBuf::from("/etc/swhkdp/swhkdp.kdl"), |file| file.clone());
-        return run_verify_mode(&config_file_path);
+        return run_verify_mode(&resolve_config_path(&args));
     }
+
+    check_pkexec();
 
     let env = environ::Env::construct();
     log::debug!("Environment Aquired");
-
-    let invoking_uid = env.pkexec_id;
 
     setup_swhkdp(&env.runtime_dir);
 
@@ -179,30 +180,24 @@ async fn main() -> Result<(), Box<dyn Error>> {
         return run_watch_mode(&args.devices, &args.ignore_devices).await;
     }
 
+    let config_file_path = resolve_config_path(&args);
+
     let load_config = || {
-        // Drop privileges to the invoking user.
-        perms::drop_privileges(invoking_uid);
-
-        let config_file_path: PathBuf =
-            args.config.as_ref().map_or_else(|| env.fetch_config_path(), |file| file.clone());
-
         log::debug!("Using config file path: {config_file_path:#?}");
 
-        if !Path::new(&config_file_path).exists() {
+        if !config_file_path.exists() {
             log::warn!("No config found at path: {config_file_path:#?}");
-            create_default_config(invoking_uid, &config_file_path);
+            create_default_config(&config_file_path);
         }
 
-        match config::load(&config_file_path) {
+        let content = read_config_content(&config_file_path);
+
+        match config::load_from_str(&content) {
             Err(e) => {
                 log::error!("Config Error: {e}");
                 exit(1)
             }
-            Ok(out) => {
-                // Escalate back to the root user after reading the config file.
-                perms::raise_privileges();
-                out
-            }
+            Ok(out) => out,
         }
     };
 
@@ -613,22 +608,11 @@ fn emit_or_warn(dev: &mut evdev::uinput::VirtualDevice, events: &[evdev::InputEv
     }
 }
 
-pub fn check_input_group() {
+pub fn check_pkexec() {
     if !Uid::current().is_root() {
-        let groups = nix::unistd::getgroups();
-        for groups in groups.iter() {
-            for group in groups {
-                let group = Group::from_gid(*group);
-                if group.unwrap().unwrap().name == "input" {
-                    log::error!("Note: INVOKING USER IS IN INPUT GROUP!!!!");
-                    log::error!("THIS IS A HUGE SECURITY RISK!!!!");
-                }
-            }
-        }
+        log::error!("swhkdp must be started via pkexec.");
         log::error!("Consider using `pkexec swhkdp ...`");
         exit(1);
-    } else {
-        log::warn!("Running swhkdp as root!");
     }
 }
 
@@ -703,12 +687,9 @@ pub fn setup_swhkdp(runtime_path: &Path) {
             exit(1);
         }
     }
-
-    check_input_group();
 }
 
-pub fn create_default_config(invoking_uid: u32, config_file_path: &Path) {
-    perms::raise_privileges();
+pub fn create_default_config(config_file_path: &Path) {
     match fs::File::create(config_file_path) {
         Ok(mut file) => {
             log::debug!("Created default swhkdp config at: {config_file_path:#?}");
@@ -719,7 +700,60 @@ pub fn create_default_config(invoking_uid: u32, config_file_path: &Path) {
             exit(1);
         }
     };
-    perms::drop_privileges(invoking_uid);
+}
+
+fn resolve_config_path(args: &Args) -> PathBuf {
+    #[cfg(debug_assertions)]
+    if let Some(path) = args.config.as_ref() {
+        return path.clone();
+    }
+    #[cfg(not(debug_assertions))]
+    let _ = args;
+    PathBuf::from(RELEASE_CONFIG_PATH)
+}
+
+fn read_config_content(config_file_path: &Path) -> String {
+    #[cfg(not(debug_assertions))]
+    if !perms::chain_is_root_write_only(config_file_path) {
+        log::error!(
+            "Refusing config {}: its directory chain must be owned by root and writable only by root",
+            config_file_path.display()
+        );
+        exit(1);
+    }
+
+    let mut file = match fs::File::open(config_file_path) {
+        Ok(file) => file,
+        Err(e) => {
+            log::error!("Failed to open config {}: {e}", config_file_path.display());
+            exit(1);
+        }
+    };
+
+    #[cfg(not(debug_assertions))]
+    {
+        let st = match nix::sys::stat::fstat(&file) {
+            Ok(st) => st,
+            Err(e) => {
+                log::error!("Failed to stat config {}: {e}", config_file_path.display());
+                exit(1);
+            }
+        };
+        if !perms::root_write_only(st.st_uid, st.st_mode as u32) {
+            log::error!(
+                "Refusing config {}: must be owned by root and writable only by root",
+                config_file_path.display()
+            );
+            exit(1);
+        }
+    }
+
+    let mut content = String::new();
+    if let Err(e) = file.read_to_string(&mut content) {
+        log::error!("Failed to read config {}: {e}", config_file_path.display());
+        exit(1);
+    }
+    content
 }
 
 fn hotkey_armed(
