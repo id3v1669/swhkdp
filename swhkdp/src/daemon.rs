@@ -19,6 +19,7 @@ use std::{
     fs::Permissions,
     io::prelude::*,
     os::unix::fs::PermissionsExt,
+    os::unix::io::AsRawFd,
     path::{Path, PathBuf},
     process::{exit, id},
 };
@@ -48,6 +49,7 @@ mod environ;
 mod macro_runner;
 #[cfg(not(debug_assertions))]
 mod perms;
+mod rel_mask;
 mod uinput;
 
 #[cfg(feature = "macro")]
@@ -65,20 +67,24 @@ struct DeviceState {
     state_modifiers: AttributeSet<KeyCode>,
     state_modifiers_count: usize,
     state_keysyms: AttributeSet<KeyCode>,
-    hi_res_wheel: bool,
+    allowed_rel: u16,
 }
 
 impl DeviceState {
     fn new(device: &Device) -> DeviceState {
-        let hi_res_wheel = device
-            .supported_relative_axes()
-            .is_some_and(|axes| axes.contains(evdev::RelativeAxisCode::REL_WHEEL_HI_RES));
+        let allowed_rel = rel_mask::allowed_rel_axes(device.supported_relative_axes());
+        if let Err(e) = rel_mask::apply_kernel_rel_mask(device.as_raw_fd(), allowed_rel) {
+            log::debug!(
+                "EVIOCSMASK failed for '{}' ({e}), filtering REL events in userspace",
+                device.name().unwrap_or("[unknown]")
+            );
+        }
 
         DeviceState {
             state_modifiers: AttributeSet::new(),
             state_modifiers_count: 0,
             state_keysyms: AttributeSet::new(),
-            hi_res_wheel,
+            allowed_rel,
         }
     }
 }
@@ -426,18 +432,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         continue
                     }
                     EventSummary::RelativeAxis(_, rlcode, _) => {
-                        match rlcode {
-                            evdev::RelativeAxisCode::REL_WHEEL_HI_RES => {
-                                if device_state.hi_res_wheel {
-                                    emit_or_warn(&mut uinput_device, &[event]);
-                                }
-                            }
-                            evdev::RelativeAxisCode::REL_WHEEL => {
-                                if !device_state.hi_res_wheel {
-                                    emit_or_warn(&mut uinput_device, &[event]);
-                                }
-                            }
-                            _ => emit_or_warn(&mut uinput_device, &[event]),
+                        if rel_mask::is_allowed(device_state.allowed_rel, rlcode) {
+                            emit_or_warn(&mut uinput_device, &[event]);
                         }
                         continue
                     }

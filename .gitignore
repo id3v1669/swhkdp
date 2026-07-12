@@ -3,6 +3,7 @@ target
 *.zip
 *.gz
 *.out
+*-out
 com.github.swhkdp.pkexec.policy
 *rc
 !*rc/
