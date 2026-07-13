@@ -334,7 +334,8 @@ fn build_macro_hotkey(
         }
     };
     if steps.is_empty() {
-        log::warn!("Skipping @macro hotkey has not valid steps: {keycodes_raw:?}")
+        log::warn!("Skipping @macro hotkey: no valid steps: {keycodes_raw:?}");
+        return None;
     }
     Some(Hotkey {
         keybind: KeyBinding { keysym, modifiers, send, on_release },

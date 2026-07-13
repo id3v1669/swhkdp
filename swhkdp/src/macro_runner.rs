@@ -47,7 +47,7 @@ pub fn interpolate_arc(
     if n == 0 {
         return vec![];
     }
-    let chord_len = ((total_x * total_x + total_y * total_y) as f64).sqrt();
+    let chord_len = ((total_x as f64).powi(2) + (total_y as f64).powi(2)).sqrt();
 
     if chord_len == 0.0 {
         return vec![(0, 0); n];
